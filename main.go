@@ -10,7 +10,7 @@ import (
 
 type IPHeader struct {
 	Version                uint8  // バージョン
-	HeaderLength           uint8  // ヘッダ長
+	HeaderLength           int    // ヘッダ長
 	DifferentiatedServices uint8  // ディファレンシェーション・サービス
 	TotalLength            uint16 // トータル長
 	Identification         uint16 // 識別子
@@ -22,16 +22,23 @@ type IPHeader struct {
 }
 
 type TCPHeader struct {
-	SrcPort       uint16
-	DstPort       uint16
-	SeqNum        uint32
-	AckNum        uint32
-	DataOffset    uint8
-	Reserved      uint8
-	Flags         uint16
-	WindowSize    uint16
-	Checksum      uint16
-	UrgentPointer uint16
+	SourcePort           uint16
+	DestinationPort      uint16
+	SequenceNumber       uint32
+	AcknowledgmentNumber uint32
+	Reserved             int
+	NS                   int
+	CWR                  int
+	ECE                  int
+	URG                  int
+	ACK                  int
+	PSH                  int
+	RST                  int
+	SYN                  int
+	FIN                  int
+	WindowSize           uint16
+	Checksum             uint16
+	UrgentPointer        uint16
 }
 
 func main() {
@@ -92,7 +99,7 @@ func main() {
 		}
 
 		ipHeaderStruct.Version = version
-		ipHeaderStruct.HeaderLength = length
+		ipHeaderStruct.HeaderLength = int(length)
 		ipHeaderStruct.DifferentiatedServices = ipHdrBuf[1]
 		ipHeaderStruct.TotalLength = binary.BigEndian.Uint16(ipHdrBuf[2:4]) // wireshark: 60, this: 40
 		ipHeaderStruct.Identification = binary.BigEndian.Uint16(ipHdrBuf[4:6])
@@ -102,9 +109,36 @@ func main() {
 		ipHeaderStruct.SourceIP = sourceIP
 		ipHeaderStruct.DestinationIP = destinationIP
 
-		log.Printf("IP Header: %+v", ipHeaderStruct)
+		// log.Printf("IP Header: %+v", ipHeaderStruct)
 
 		// TCPヘッダを解析
 		// https://www.infraexpert.com/study/tcpip8.html
+		// TCPヘッダーの長さを計算
+		tcpHeaderLength := ((int(buf[ipHeaderStruct.HeaderLength+12]) & 0xf0) >> 4) * 4
+		tcpHdrBuf := buf[ipHeaderStruct.HeaderLength : ipHeaderStruct.HeaderLength+tcpHeaderLength]
+
+		var tcpHeaderStruct TCPHeader
+
+		tcpHeaderStruct.SourcePort = binary.BigEndian.Uint16(tcpHdrBuf[0:2])
+		tcpHeaderStruct.DestinationPort = binary.BigEndian.Uint16(tcpHdrBuf[2:4])
+		tcpHeaderStruct.SequenceNumber = binary.BigEndian.Uint32(tcpHdrBuf[4:8])
+		tcpHeaderStruct.AcknowledgmentNumber = binary.BigEndian.Uint32(tcpHdrBuf[8:12])
+
+		tcpHeaderStruct.Reserved = (int(tcpHdrBuf[12]) & 0x0e) >> 1 // Flags Reversed , Fin, Syn, Rst, Psh, Ack, Urg
+		tcpHeaderStruct.NS = int(tcpHdrBuf[12]) & 0x01
+		tcpHeaderStruct.CWR = (int(tcpHdrBuf[13]) & 0x80) >> 7
+		tcpHeaderStruct.ECE = (int(tcpHdrBuf[13]) & 0x40) >> 6
+		tcpHeaderStruct.URG = (int(tcpHdrBuf[13]) & 0x20) >> 5
+		tcpHeaderStruct.ACK = (int(tcpHdrBuf[13]) & 0x10) >> 4
+		tcpHeaderStruct.PSH = (int(tcpHdrBuf[13]) & 0x08) >> 3
+		tcpHeaderStruct.RST = (int(tcpHdrBuf[13]) & 0x04) >> 2
+		tcpHeaderStruct.SYN = (int(tcpHdrBuf[13]) & 0x02) >> 1
+		tcpHeaderStruct.FIN = int(tcpHdrBuf[13]) & 0x01
+
+		tcpHeaderStruct.WindowSize = binary.BigEndian.Uint16(tcpHdrBuf[14:16])
+		tcpHeaderStruct.Checksum = binary.BigEndian.Uint16(tcpHdrBuf[16:18])
+		tcpHeaderStruct.UrgentPointer = binary.BigEndian.Uint16(tcpHdrBuf[18:20])
+
+		log.Printf("TCP Header: %+v", tcpHeaderStruct)
 	}
 }
