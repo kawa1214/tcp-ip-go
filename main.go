@@ -243,29 +243,6 @@ func sendAckResponseWithPayload(file *os.File, ipHeader *IPHeader, tcpHeader *TC
 	}
 }
 
-func sendAckV2(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader, dataLen int) {
-	newIPHeader := buildIPHeader(ipHeader.DstIP, ipHeader.SrcIP, 6, 20) // 6: TCP protocol, 20: TCP header length
-
-	newTCPHeader := make([]byte, 20)
-	binary.BigEndian.PutUint16(newTCPHeader[0:2], tcpHeader.DstPort)
-	binary.BigEndian.PutUint16(newTCPHeader[2:4], tcpHeader.SrcPort)
-	binary.BigEndian.PutUint32(newTCPHeader[4:8], tcpHeader.AckNum)
-	binary.BigEndian.PutUint32(newTCPHeader[8:12], tcpHeader.SeqNum+uint32(dataLen))
-	newTCPHeader[12] = 0x50 // Data offset (5 x 4 bytes)
-	newTCPHeader[13] = 0x10 // Flags (ACK)
-	// newTCPHeader[13] = 0x18 // Flags (PSH, ACK)
-	binary.BigEndian.PutUint16(newTCPHeader[14:16], tcpHeader.WindowSize)
-	binary.BigEndian.PutUint16(newTCPHeader[16:18], 0) // Checksum (0で初期化)
-	binary.BigEndian.PutUint16(newTCPHeader[18:20], 0) // Urgent pointer
-
-	responsePacket := append(newIPHeader, newTCPHeader...)
-
-	_, err := file.Write(responsePacket)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
 func sendSynAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader) {
 	newIPHeader := make([]byte, 20)
 	newIPHeader[0] = 0x45                                       // Version (IPv4) and IHL (5)
@@ -306,52 +283,6 @@ func sendSynAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader) {
 	synAckPacket := append(newIPHeader, newTCPHeader...)
 
 	// SYN-ACKパケットを送信
-	_, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, file.Fd(), uintptr(unsafe.Pointer(&synAckPacket[0])), uintptr(len(synAckPacket)))
-	if sysErr != 0 {
-		log.Fatalf("Failed to send SYN-ACK packet: %s", sysErr.Error())
-	} else {
-		log.Printf("SYN-ACK packet sent")
-	}
-}
-
-func sendAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader, dataLength int) {
-	newIPHeader := make([]byte, 20)
-	newIPHeader[0] = 0x45                                       // Version (IPv4) and IHL (5)
-	newIPHeader[1] = 0                                          // TOS
-	binary.BigEndian.PutUint16(newIPHeader[2:4], uint16(20+20)) // Total Length
-	binary.BigEndian.PutUint16(newIPHeader[4:6], 0)             // ID
-	binary.BigEndian.PutUint16(newIPHeader[6:8], 0x4000)        // Flags (Don't Fragment) and Fragment Offset
-	newIPHeader[8] = 64                                         // TTL
-	newIPHeader[9] = 6                                          // Protocol (TCP)
-	binary.BigEndian.PutUint16(newIPHeader[10:12], 0)           // Checksum (0で初期化)
-	copy(newIPHeader[12:16], ipHeader.DstIP[:])                 // Source IP
-	copy(newIPHeader[16:20], ipHeader.SrcIP[:])                 // Destination IP
-
-	// Calculate and set the checksum
-	checksum := calculateIPChecksum(newIPHeader)
-	binary.BigEndian.PutUint16(newIPHeader[10:12], checksum)
-
-	// TCPヘッダを構築
-	newTCPHeader := make([]byte, 20)
-	binary.BigEndian.PutUint16(newTCPHeader[0:2], tcpHeader.DstPort)
-	binary.BigEndian.PutUint16(newTCPHeader[2:4], tcpHeader.SrcPort)
-	binary.BigEndian.PutUint32(newTCPHeader[4:8], tcpHeader.AckNum)
-	binary.BigEndian.PutUint32(newTCPHeader[8:12], tcpHeader.SeqNum+uint32(dataLength))
-	newTCPHeader[12] = 0x50
-	newTCPHeader[13] = 0x10                                        // ACKフラグ (ACK: 0x10)
-	binary.BigEndian.PutUint16(newTCPHeader[14:16], uint16(65535)) // ウィンドウサイズ
-	binary.BigEndian.PutUint16(newTCPHeader[16:18], 0)             // チェックサム (0で初期化)
-	binary.BigEndian.PutUint16(newTCPHeader[18:20], 0)             // Urgentポインタ
-
-	// チェックサムを計算
-	tcpChecksum := calculateTCPChecksum(ipHeader.SrcIP, ipHeader.DstIP, newTCPHeader)
-	binary.BigEndian.PutUint16(newTCPHeader[16:18], tcpChecksum)
-	fmt.Println(len(newIPHeader) + len(newTCPHeader))
-
-	// IPヘッダとTCPヘッダを結合
-	synAckPacket := append(newIPHeader, newTCPHeader...)
-
-	// ACKパケットを送信
 	_, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, file.Fd(), uintptr(unsafe.Pointer(&synAckPacket[0])), uintptr(len(synAckPacket)))
 	if sysErr != 0 {
 		log.Fatalf("Failed to send SYN-ACK packet: %s", sysErr.Error())
