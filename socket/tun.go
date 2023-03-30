@@ -48,3 +48,12 @@ func NewTun() (*Tun, error) {
 func (t *Tun) Close() error {
 	return t.File.Close()
 }
+
+func (t *Tun) Read(buf []byte) (uintptr, error) {
+	n, _, sysErr := syscall.Syscall(syscall.SYS_READ, t.File.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	if sysErr != 0 {
+		return 0, fmt.Errorf("read error: %s", sysErr.Error())
+	}
+
+	return n, nil
+}

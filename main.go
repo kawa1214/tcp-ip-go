@@ -102,9 +102,10 @@ func main() {
 	// パケットの受信
 	buf := make([]byte, 2048)
 	for {
-		n, _, sysErr := syscall.Syscall(syscall.SYS_READ, tun.File.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-		if sysErr != 0 {
-			log.Fatal(sysErr)
+		n, err := tun.Read(buf)
+		if err != nil {
+			log.Fatal(err)
+			os.Exit(1)
 		}
 
 		// IPヘッダの解析
