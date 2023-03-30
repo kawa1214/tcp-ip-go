@@ -11,19 +11,9 @@ import (
 	"syscall"
 	"time"
 	"unsafe"
-)
 
-const (
-	TUNSETIFF = 0x400454ca
-	IFF_TUN   = 0x0001
-	IFF_TAP   = 0x0002
-	IFF_NO_PI = 0x1000
+	"github.com/kawa1214/tcp-ip-go/socket"
 )
-
-type ifreq struct {
-	IfrName  [16]byte
-	IfrFlags int16
-}
 
 type IPHeader struct {
 	Version        uint8
@@ -99,22 +89,12 @@ func ParseTCPHeader(pkt []byte) (*TCPHeader, error) {
 }
 
 func main() {
-	// デバイスファイルをオープン
-	file, err := os.OpenFile("/dev/net/tun", os.O_RDWR, 0)
+	tun, err := socket.NewTun()
 	if err != nil {
 		log.Fatal(err)
+		os.Exit(1)
 	}
-	defer file.Close()
-
-	// デバイスに設定を適用
-	ifr := ifreq{}
-	copy(ifr.IfrName[:], []byte("tun0"))
-	ifr.IfrFlags = IFF_TUN | IFF_NO_PI
-
-	_, _, sysErr := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETIFF), uintptr(unsafe.Pointer(&ifr)))
-	if sysErr != 0 {
-		log.Fatalf("ioctl error: %s", sysErr.Error())
-	}
+	defer tun.Close()
 
 	sendHttpRespones := false
 	sendFinAckResponse := false
@@ -122,7 +102,7 @@ func main() {
 	// パケットの受信
 	buf := make([]byte, 2048)
 	for {
-		n, _, sysErr := syscall.Syscall(syscall.SYS_READ, file.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+		n, _, sysErr := syscall.Syscall(syscall.SYS_READ, tun.File.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 		if sysErr != 0 {
 			log.Fatal(sysErr)
 		}
@@ -145,7 +125,7 @@ func main() {
 		if tcpHeader.Flags == 0x11 {
 			log.Printf("FIN ACK packet received")
 			tcpDataLength := int(n) - (int(ipHeader.IHL) * 4) - (int(tcpHeader.DataOff) * 4)
-			sendFinAck(file, ipHeader, tcpHeader, tcpDataLength)
+			sendFinAck(tun.File, ipHeader, tcpHeader, tcpDataLength)
 
 			sendFinAckResponse = true
 
@@ -160,7 +140,7 @@ func main() {
 			log.Printf("SYN packet received")
 
 			// SYN-ACKパケットを送信
-			sendSynAck(file, ipHeader, tcpHeader)
+			sendSynAck(tun.File, ipHeader, tcpHeader)
 
 			// ACK packet check
 		} else if tcpHeader.Flags&0x10 != 0 {
@@ -183,7 +163,7 @@ func main() {
 			if req.Method == "GET" && req.URI == "/" {
 				// ACKパケットをGET Req(PSH,ACK)の応答として返す
 				tcpDataLength := int(n) - (int(ipHeader.IHL) * 4) - (int(tcpHeader.DataOff) * 4)
-				sendAckResponseWithPayload(file, ipHeader, tcpHeader, tcpDataLength)
+				sendAckResponseWithPayload(tun.File, ipHeader, tcpHeader, tcpDataLength)
 				sendHttpRespones = true
 
 				fmt.Println("HTTP response sent")
