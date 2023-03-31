@@ -10,7 +10,6 @@ import (
 const (
 	TUNSETIFF = 0x400454ca
 	IFF_TUN   = 0x0001
-	IFF_TAP   = 0x0002
 	IFF_NO_PI = 0x1000
 )
 
@@ -24,6 +23,7 @@ type Tun struct {
 	ifreq *Ifreq
 }
 
+// NewTun creates and initializes a new TUN device.
 func NewTun() (*Tun, error) {
 	file, err := os.OpenFile("/dev/net/tun", os.O_RDWR, 0)
 	if err != nil {
@@ -45,10 +45,12 @@ func NewTun() (*Tun, error) {
 	}, nil
 }
 
+// Close closes the TUN device.
 func (t *Tun) Close() error {
 	return t.File.Close()
 }
 
+// Read packets with TUN Device.
 func (t *Tun) Read(buf []byte) (uintptr, error) {
 	n, _, sysErr := syscall.Syscall(syscall.SYS_READ, t.File.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 	if sysErr != 0 {
