@@ -12,7 +12,9 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/kawa1214/tcp-ip-go/ip"
 	"github.com/kawa1214/tcp-ip-go/socket"
+	"github.com/kawa1214/tcp-ip-go/tcp"
 )
 
 type IPHeader struct {
@@ -41,30 +43,6 @@ type TCPHeader struct {
 	WindowSize uint16
 	Checksum   uint16
 	UrgentPtr  uint16
-}
-
-func ParseIPHeader(pkt []byte) (*IPHeader, error) {
-	if len(pkt) < 20 {
-		return nil, fmt.Errorf("invalid IP header length")
-	}
-
-	header := &IPHeader{
-		Version:        pkt[0] >> 4,
-		IHL:            pkt[0] & 0x0F,
-		TOS:            pkt[1],
-		TotalLength:    binary.BigEndian.Uint16(pkt[2:4]),
-		ID:             binary.BigEndian.Uint16(pkt[4:6]),
-		Flags:          pkt[6] >> 5,
-		FragmentOffset: binary.BigEndian.Uint16(pkt[6:8]) & 0x1FFF,
-		TTL:            pkt[8],
-		Protocol:       pkt[9],
-		Checksum:       binary.BigEndian.Uint16(pkt[10:12]),
-	}
-
-	copy(header.SrcIP[:], pkt[12:16])
-	copy(header.DstIP[:], pkt[16:20])
-
-	return header, nil
 }
 
 func ParseTCPHeader(pkt []byte) (*TCPHeader, error) {
@@ -99,7 +77,6 @@ func main() {
 	sendHttpRespones := false
 	sendFinAckResponse := false
 
-	// パケットの受信
 	buf := make([]byte, 2048)
 	for {
 		n, err := tun.Read(buf)
@@ -109,7 +86,7 @@ func main() {
 		}
 
 		// IPヘッダの解析
-		ipHeader, err := ParseIPHeader(buf[:n])
+		ipHeader, err := ip.Parse(buf[:n])
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -175,31 +152,14 @@ func main() {
 
 }
 
-func buildIPHeader(srcIP, dstIP [4]byte, protocol uint8, payloadLen int) []byte {
-	header := make([]byte, 20)
-	header[0] = 0x45                                               // Version (IPv4) and IHL (5)
-	header[1] = 0                                                  // TOS
-	binary.BigEndian.PutUint16(header[2:4], uint16(20+payloadLen)) // Total Length
-	binary.BigEndian.PutUint16(header[4:6], 0)                     // ID
-	binary.BigEndian.PutUint16(header[6:8], 0x4000)                // Flags (Don't Fragment) and Fragment Offset
-	header[8] = 64                                                 // TTL
-	header[9] = protocol                                           // Protocol (TCP)
-	binary.BigEndian.PutUint16(header[10:12], 0)                   // Checksum (0で初期化)
-	copy(header[12:16], srcIP[:])                                  // Source IP
-	copy(header[16:20], dstIP[:])                                  // Destination IP
-
-	// Calculate and set the checksum
-	checksum := calculateIPChecksum(header)
-	binary.BigEndian.PutUint16(header[10:12], checksum)
-
-	return header
-}
-
-func sendAckResponseWithPayload(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader, dataLen int) {
+func sendAckResponseWithPayload(file *os.File, ipHeader *ip.Header, tcpHeader *TCPHeader, dataLen int) {
 	payload := []byte("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 15\r\n\r\nHello, World!\r\n")
 	payloadLen := len(payload)
 
-	newIPHeader := buildIPHeader(ipHeader.DstIP, ipHeader.SrcIP, 6, 20+payloadLen) // 6: TCP protocol, 20: TCP header length + payload length
+	newIPHeader := ip.New(ipHeader.DstIP, ipHeader.SrcIP, tcp.LENGTH+payloadLen)
+	ipHeaderPacket := newIPHeader.Marshal()
+	newIPHeader.SetChecksum(ipHeaderPacket)
+	ipHeaderPacket = newIPHeader.Marshal()
 
 	newTCPHeader := make([]byte, 20)
 	binary.BigEndian.PutUint16(newTCPHeader[0:2], tcpHeader.DstPort)
@@ -215,7 +175,7 @@ func sendAckResponseWithPayload(file *os.File, ipHeader *IPHeader, tcpHeader *TC
 	tcpChecksum := calculateTCPChecksum(ipHeader.SrcIP, ipHeader.DstIP, append(newTCPHeader, payload...))
 	binary.BigEndian.PutUint16(newTCPHeader[16:18], tcpChecksum)
 
-	responsePacket := append(newIPHeader, newTCPHeader...)
+	responsePacket := append(ipHeaderPacket, newTCPHeader...)
 	responsePacket = append(responsePacket, payload...)
 
 	_, err := file.Write(responsePacket)
@@ -224,22 +184,11 @@ func sendAckResponseWithPayload(file *os.File, ipHeader *IPHeader, tcpHeader *TC
 	}
 }
 
-func sendSynAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader) {
-	newIPHeader := make([]byte, 20)
-	newIPHeader[0] = 0x45                                       // Version (IPv4) and IHL (5)
-	newIPHeader[1] = 0                                          // TOS
-	binary.BigEndian.PutUint16(newIPHeader[2:4], uint16(20+20)) // Total Length
-	binary.BigEndian.PutUint16(newIPHeader[4:6], 0)             // ID
-	binary.BigEndian.PutUint16(newIPHeader[6:8], 0x4000)        // Flags (Don't Fragment) and Fragment Offset
-	newIPHeader[8] = 64                                         // TTL
-	newIPHeader[9] = 6                                          // Protocol (TCP)
-	binary.BigEndian.PutUint16(newIPHeader[10:12], 0)           // Checksum (0で初期化)
-	copy(newIPHeader[12:16], ipHeader.DstIP[:])                 // Source IP
-	copy(newIPHeader[16:20], ipHeader.SrcIP[:])                 // Destination IP
-
-	// Calculate and set the checksum
-	checksum := calculateIPChecksum(newIPHeader)
-	binary.BigEndian.PutUint16(newIPHeader[10:12], checksum)
+func sendSynAck(file *os.File, ipHeader *ip.Header, tcpHeader *TCPHeader) {
+	newIPHeader := ip.New(ipHeader.DstIP, ipHeader.SrcIP, tcp.LENGTH)
+	ipHeaderPacket := newIPHeader.Marshal()
+	newIPHeader.SetChecksum(ipHeaderPacket)
+	ipHeaderPacket = newIPHeader.Marshal()
 
 	seed := time.Now().UnixNano()
 	r := rand.New(rand.NewSource(seed))
@@ -261,7 +210,7 @@ func sendSynAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader) {
 	binary.BigEndian.PutUint16(newTCPHeader[16:18], tcpChecksum)
 
 	// IPヘッダとTCPヘッダを結合
-	synAckPacket := append(newIPHeader, newTCPHeader...)
+	synAckPacket := append(ipHeaderPacket, newTCPHeader...)
 
 	// SYN-ACKパケットを送信
 	_, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, file.Fd(), uintptr(unsafe.Pointer(&synAckPacket[0])), uintptr(len(synAckPacket)))
@@ -272,22 +221,11 @@ func sendSynAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader) {
 	}
 }
 
-func sendFinAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader, dataLength int) {
-	newIPHeader := make([]byte, 20)
-	newIPHeader[0] = 0x45                                       // Version (IPv4) and IHL (5)
-	newIPHeader[1] = 0                                          // TOS
-	binary.BigEndian.PutUint16(newIPHeader[2:4], uint16(20+20)) // Total Length
-	binary.BigEndian.PutUint16(newIPHeader[4:6], 0)             // ID
-	binary.BigEndian.PutUint16(newIPHeader[6:8], 0x4000)        // Flags (Don't Fragment) and Fragment Offset
-	newIPHeader[8] = 64                                         // TTL
-	newIPHeader[9] = 6                                          // Protocol (TCP)
-	binary.BigEndian.PutUint16(newIPHeader[10:12], 0)           // Checksum (0で初期化)
-	copy(newIPHeader[12:16], ipHeader.DstIP[:])                 // Source IP
-	copy(newIPHeader[16:20], ipHeader.SrcIP[:])                 // Destination IP
-
-	// Calculate and set the checksum
-	checksum := calculateIPChecksum(newIPHeader)
-	binary.BigEndian.PutUint16(newIPHeader[10:12], checksum)
+func sendFinAck(file *os.File, ipHeader *ip.Header, tcpHeader *TCPHeader, dataLength int) {
+	newIPHeader := ip.New(ipHeader.DstIP, ipHeader.SrcIP, tcp.LENGTH)
+	ipHeaderPacket := newIPHeader.Marshal()
+	newIPHeader.SetChecksum(ipHeaderPacket)
+	ipHeaderPacket = newIPHeader.Marshal()
 
 	// TCPヘッダを構築
 	newTCPHeader := make([]byte, 20)
@@ -304,10 +242,9 @@ func sendFinAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader, dataLen
 	// チェックサムを計算
 	tcpChecksum := calculateTCPChecksum(ipHeader.SrcIP, ipHeader.DstIP, newTCPHeader)
 	binary.BigEndian.PutUint16(newTCPHeader[16:18], tcpChecksum)
-	fmt.Println(len(newIPHeader) + len(newTCPHeader))
 
 	// IPヘッダとTCPヘッダを結合
-	synAckPacket := append(newIPHeader, newTCPHeader...)
+	synAckPacket := append(ipHeaderPacket, newTCPHeader...)
 
 	// ACKパケットを送信
 	_, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, file.Fd(), uintptr(unsafe.Pointer(&synAckPacket[0])), uintptr(len(synAckPacket)))
@@ -316,21 +253,6 @@ func sendFinAck(file *os.File, ipHeader *IPHeader, tcpHeader *TCPHeader, dataLen
 	} else {
 		log.Printf("SYN-ACK packet sent")
 	}
-}
-
-func calculateIPChecksum(header []byte) uint16 {
-	length := len(header)
-	var checksum uint32
-
-	for i := 0; i < length; i += 2 {
-		checksum += uint32(binary.BigEndian.Uint16(header[i : i+2]))
-	}
-
-	for checksum > 0xffff {
-		checksum = (checksum & 0xffff) + (checksum >> 16)
-	}
-
-	return ^uint16(checksum)
 }
 
 func calculateTCPChecksum(srcIP, dstIP [4]byte, tcpHeader []byte) uint16 {
