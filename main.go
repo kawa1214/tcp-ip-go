@@ -43,10 +43,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		log.Println("flags:", tcpHeader.Flags)
-
-		// FIN ACKフラグを持っていることを確認
-		if tcpHeader.Flags == 0x11 {
+		if tcpHeader.Flags.FIN && tcpHeader.Flags.ACK {
 			log.Printf("FIN ACK packet received")
 			tcpDataLength := int(n) - (int(ipHeader.IHL) * 4) - (int(tcpHeader.DataOff) * 4)
 			sendFinAck(tun.File, ipHeader, tcpHeader, tcpDataLength)
@@ -55,16 +52,14 @@ func main() {
 
 			os.Exit(0)
 
-			// SYNフラグを持っていることを確認
-		} else if tcpHeader.Flags == 0x02 {
+		} else if tcpHeader.Flags.SYN {
 
 			log.Printf("SYN packet received")
 
 			// SYN-ACKパケットを送信
 			sendSynAck(tun.File, ipHeader, tcpHeader)
 
-			// ACK packet check
-		} else if tcpHeader.Flags&0x10 != 0 {
+		} else if tcpHeader.Flags.ACK {
 			log.Printf("ACK packet received")
 
 			if sendHttpRespones {
@@ -79,7 +74,6 @@ func main() {
 			if err != nil {
 				continue
 			}
-			log.Printf("HTTP request: %s %s %v", req.Method, req.URI, string(buf[ipHeader.IHL*4+tcpHeader.DataOff*4:]))
 			if req.Method == "GET" && req.URI == "/" {
 				// ACKパケットをGET Req(PSH,ACK)の応答として返す
 				tcpDataLength := int(n) - (int(ipHeader.IHL) * 4) - (int(tcpHeader.DataOff) * 4)
@@ -88,7 +82,6 @@ func main() {
 
 				fmt.Println("HTTP response sent")
 			}
-			// FIN ACK packet check
 		}
 	}
 
@@ -108,7 +101,10 @@ func sendAckResponseWithPayload(file *os.File, ipHeader *ip.Header, tcpHeader *t
 		tcpHeader.SrcPort,
 		tcpHeader.AckNum,
 		tcpHeader.SeqNum+uint32(dataLen),
-		0x18, // SYN-ACKフラグ (PSH: 0x02, ACK: 0x10)
+		tcp.HeaderFlags{
+			PSH: true,
+			ACK: true,
+		},
 	)
 	tcpHeaderPacket := newTcpHeader.Marshal()
 	newTcpHeader.SetChecksum(*ipHeader, append(tcpHeaderPacket, payload...))
@@ -137,7 +133,10 @@ func sendSynAck(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header) {
 		tcpHeader.SrcPort,
 		uint32(r.Int31()),
 		tcpHeader.SeqNum+1,
-		0x12, // SYN-ACKフラグ (SYN: 0x02, ACK: 0x10)
+		tcp.HeaderFlags{
+			SYN: true,
+			ACK: true,
+		},
 	)
 	tcpHeaderPacket := newTcpHeader.Marshal()
 	newTcpHeader.SetChecksum(*ipHeader, tcpHeaderPacket)
@@ -166,7 +165,10 @@ func sendFinAck(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header, dataL
 		tcpHeader.SrcPort,
 		tcpHeader.AckNum,
 		tcpHeader.SeqNum+uint32(dataLength),
-		0x11, // SYN-ACKフラグ (FIN, ACK)
+		tcp.HeaderFlags{
+			FIN: true,
+			ACK: true,
+		},
 	)
 	tcpHeaderPacket := newTcpHeader.Marshal()
 	newTcpHeader.SetChecksum(*ipHeader, tcpHeaderPacket)

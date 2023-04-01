@@ -20,10 +20,21 @@ type Header struct {
 	AckNum     uint32
 	DataOff    uint8
 	Reserved   uint8
-	Flags      uint8
+	Flags      HeaderFlags
 	WindowSize uint16
 	Checksum   uint16
 	UrgentPtr  uint16
+}
+
+type HeaderFlags struct {
+	CWR bool
+	ECE bool
+	URG bool
+	ACK bool
+	PSH bool
+	RST bool
+	SYN bool
+	FIN bool
 }
 
 // New creates a new TCP header from packet.
@@ -32,6 +43,8 @@ func Parse(pkt []byte) (*Header, error) {
 		return nil, fmt.Errorf("invalid TCP header length")
 	}
 
+	flags := parseFlag(pkt[13])
+
 	header := &Header{
 		SrcPort:    binary.BigEndian.Uint16(pkt[0:2]),
 		DstPort:    binary.BigEndian.Uint16(pkt[2:4]),
@@ -39,7 +52,7 @@ func Parse(pkt []byte) (*Header, error) {
 		AckNum:     binary.BigEndian.Uint32(pkt[8:12]),
 		DataOff:    pkt[12] >> 4,
 		Reserved:   pkt[12] & 0x0E,
-		Flags:      pkt[13],
+		Flags:      flags,
 		WindowSize: binary.BigEndian.Uint16(pkt[14:16]),
 		Checksum:   binary.BigEndian.Uint16(pkt[16:18]),
 		UrgentPtr:  binary.BigEndian.Uint16(pkt[18:20]),
@@ -49,7 +62,7 @@ func Parse(pkt []byte) (*Header, error) {
 }
 
 // Create a new TCP header.
-func New(srcPort, dstPort uint16, seqNum, ackNum uint32, flags uint8) *Header {
+func New(srcPort, dstPort uint16, seqNum, ackNum uint32, flags HeaderFlags) *Header {
 	return &Header{
 		SrcPort:    srcPort,
 		DstPort:    dstPort,
@@ -66,13 +79,15 @@ func New(srcPort, dstPort uint16, seqNum, ackNum uint32, flags uint8) *Header {
 
 // Return a byte slice of the packet.
 func (h *Header) Marshal() []byte {
+	f := h.Flags.marshal()
+
 	pkt := make([]byte, 20)
 	binary.BigEndian.PutUint16(pkt[0:2], h.SrcPort)
 	binary.BigEndian.PutUint16(pkt[2:4], h.DstPort)
 	binary.BigEndian.PutUint32(pkt[4:8], h.SeqNum)
 	binary.BigEndian.PutUint32(pkt[8:12], h.AckNum)
 	pkt[12] = h.DataOff
-	pkt[13] = h.Flags
+	pkt[13] = f
 	binary.BigEndian.PutUint16(pkt[14:16], h.WindowSize)
 	binary.BigEndian.PutUint16(pkt[16:18], h.Checksum)
 	binary.BigEndian.PutUint16(pkt[18:20], h.UrgentPtr)
@@ -104,4 +119,48 @@ func (h *Header) SetChecksum(ipHeader ip.Header, pkt []byte) {
 	}
 
 	h.Checksum = ^uint16(checksum)
+}
+
+// Return a string representation of the packet byte.
+func parseFlag(f uint8) HeaderFlags {
+	return HeaderFlags{
+		CWR: f&0x80 == 0x80,
+		ECE: f&0x40 == 0x40,
+		URG: f&0x20 == 0x20,
+		ACK: f&0x10 == 0x10,
+		PSH: f&0x08 == 0x08,
+		RST: f&0x04 == 0x04,
+		SYN: f&0x02 == 0x02,
+		FIN: f&0x01 == 0x01,
+	}
+}
+
+// Return a byte slice of the packet.
+func (f *HeaderFlags) marshal() uint8 {
+	var packedFlags uint8
+	if f.CWR {
+		packedFlags |= 0x80
+	}
+	if f.ECE {
+		packedFlags |= 0x40
+	}
+	if f.URG {
+		packedFlags |= 0x20
+	}
+	if f.ACK {
+		packedFlags |= 0x10
+	}
+	if f.PSH {
+		packedFlags |= 0x08
+	}
+	if f.RST {
+		packedFlags |= 0x04
+	}
+	if f.SYN {
+		packedFlags |= 0x02
+	}
+	if f.FIN {
+		packedFlags |= 0x01
+	}
+	return packedFlags
 }
