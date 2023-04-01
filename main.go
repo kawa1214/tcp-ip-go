@@ -5,9 +5,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/kawa1214/tcp-ip-go/ip"
 	"github.com/kawa1214/tcp-ip-go/server"
@@ -46,8 +44,8 @@ func main() {
 		if tcpHeader.Flags.FIN && tcpHeader.Flags.ACK {
 			log.Printf("FIN ACK packet received")
 			tcpDataLength := int(n) - (int(ipHeader.IHL) * 4) - (int(tcpHeader.DataOff) * 4)
-			sendFinAck(tun.File, ipHeader, tcpHeader, tcpDataLength)
-
+			p := sendFinAck(tun.File, ipHeader, tcpHeader, tcpDataLength)
+			tun.Write(p)
 			sendFinAckResponse = true
 
 			os.Exit(0)
@@ -57,7 +55,8 @@ func main() {
 			log.Printf("SYN packet received")
 
 			// SYN-ACKパケットを送信
-			sendSynAck(tun.File, ipHeader, tcpHeader)
+			p := sendSynAck(tun.File, ipHeader, tcpHeader)
+			tun.Write(p)
 
 		} else if tcpHeader.Flags.ACK {
 			log.Printf("ACK packet received")
@@ -75,9 +74,9 @@ func main() {
 				continue
 			}
 			if req.Method == "GET" && req.URI == "/" {
-				// ACKパケットをGET Req(PSH,ACK)の応答として返す
 				tcpDataLength := int(n) - (int(ipHeader.IHL) * 4) - (int(tcpHeader.DataOff) * 4)
-				sendAckResponseWithPayload(tun.File, ipHeader, tcpHeader, tcpDataLength)
+				p := sendAckResponseWithPayload(ipHeader, tcpHeader, tcpDataLength)
+				tun.Write(p)
 				sendHttpRespones = true
 
 				fmt.Println("HTTP response sent")
@@ -87,7 +86,7 @@ func main() {
 
 }
 
-func sendAckResponseWithPayload(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header, dataLen int) {
+func sendAckResponseWithPayload(ipHeader *ip.Header, tcpHeader *tcp.Header, dataLen int) []byte {
 	response := server.NewTextOkResponse("Hello, World!\r\n")
 	payload := response.String()
 
@@ -113,13 +112,10 @@ func sendAckResponseWithPayload(file *os.File, ipHeader *ip.Header, tcpHeader *t
 	responsePacket := append(ipHeaderPacket, tcpHeaderPacket...)
 	responsePacket = append(responsePacket, payload...)
 
-	_, err := file.Write(responsePacket)
-	if err != nil {
-		log.Fatal(err)
-	}
+	return responsePacket
 }
 
-func sendSynAck(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header) {
+func sendSynAck(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header) []byte {
 	newIPHeader := ip.New(ipHeader.DstIP, ipHeader.SrcIP, tcp.LENGTH)
 	ipHeaderPacket := newIPHeader.Marshal()
 	newIPHeader.SetChecksum(ipHeaderPacket)
@@ -142,19 +138,12 @@ func sendSynAck(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header) {
 	newTcpHeader.SetChecksum(*ipHeader, tcpHeaderPacket)
 	tcpHeaderPacket = newTcpHeader.Marshal()
 
-	// IPヘッダとTCPヘッダを結合
 	synAckPacket := append(ipHeaderPacket, tcpHeaderPacket...)
 
-	// SYN-ACKパケットを送信
-	_, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, file.Fd(), uintptr(unsafe.Pointer(&synAckPacket[0])), uintptr(len(synAckPacket)))
-	if sysErr != 0 {
-		log.Fatalf("Failed to send SYN-ACK packet: %s", sysErr.Error())
-	} else {
-		log.Printf("SYN-ACK packet sent")
-	}
+	return synAckPacket
 }
 
-func sendFinAck(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header, dataLength int) {
+func sendFinAck(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header, dataLength int) []byte {
 	newIPHeader := ip.New(ipHeader.DstIP, ipHeader.SrcIP, tcp.LENGTH)
 	ipHeaderPacket := newIPHeader.Marshal()
 	newIPHeader.SetChecksum(ipHeaderPacket)
@@ -174,14 +163,7 @@ func sendFinAck(file *os.File, ipHeader *ip.Header, tcpHeader *tcp.Header, dataL
 	newTcpHeader.SetChecksum(*ipHeader, tcpHeaderPacket)
 	tcpHeaderPacket = newTcpHeader.Marshal()
 
-	// IPヘッダとTCPヘッダを結合
 	synAckPacket := append(ipHeaderPacket, tcpHeaderPacket...)
 
-	// ACKパケットを送信
-	_, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, file.Fd(), uintptr(unsafe.Pointer(&synAckPacket[0])), uintptr(len(synAckPacket)))
-	if sysErr != 0 {
-		log.Fatalf("Failed to send SYN-ACK packet: %s", sysErr.Error())
-	} else {
-		log.Printf("SYN-ACK packet sent")
-	}
+	return synAckPacket
 }

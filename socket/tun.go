@@ -59,3 +59,13 @@ func (t *Tun) Read(buf []byte) (uintptr, error) {
 
 	return n, nil
 }
+
+// Write packets with TUN Device.
+func (t *Tun) Write(buf []byte) (uintptr, error) {
+	n, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, t.File.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	if sysErr != 0 {
+		return 0, fmt.Errorf("write error: %s", sysErr.Error())
+	}
+
+	return n, nil
+}
