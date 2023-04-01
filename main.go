@@ -17,7 +17,6 @@ func main() {
 	tun, err := socket.NewTun()
 	if err != nil {
 		log.Fatal(err)
-		os.Exit(1)
 	}
 	defer tun.Close()
 
