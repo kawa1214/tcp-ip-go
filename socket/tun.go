@@ -19,7 +19,7 @@ type Ifreq struct {
 }
 
 type Tun struct {
-	File  *os.File
+	file  *os.File
 	ifreq *Ifreq
 }
 
@@ -40,19 +40,19 @@ func NewTun() (*Tun, error) {
 	}
 
 	return &Tun{
-		File:  file,
+		file:  file,
 		ifreq: &ifr,
 	}, nil
 }
 
 // Close closes the TUN device.
 func (t *Tun) Close() error {
-	return t.File.Close()
+	return t.file.Close()
 }
 
 // Read packets with TUN Device.
 func (t *Tun) Read(buf []byte) (uintptr, error) {
-	n, _, sysErr := syscall.Syscall(syscall.SYS_READ, t.File.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	n, _, sysErr := syscall.Syscall(syscall.SYS_READ, t.file.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 	if sysErr != 0 {
 		return 0, fmt.Errorf("read error: %s", sysErr.Error())
 	}
@@ -62,7 +62,7 @@ func (t *Tun) Read(buf []byte) (uintptr, error) {
 
 // Write packets with TUN Device.
 func (t *Tun) Write(buf []byte) (uintptr, error) {
-	n, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, t.File.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	n, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, t.file.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 	if sysErr != 0 {
 		return 0, fmt.Errorf("write error: %s", sysErr.Error())
 	}
