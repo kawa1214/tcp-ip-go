@@ -76,19 +76,19 @@ func (h *Header) Marshal() []byte {
 	versionAndIHL := (h.Version << 4) | h.IHL
 	flagsAndFragmentOffset := (uint16(h.FragmentOffset) << 13) | (h.FragmentOffset & 0x1FFF)
 
-	newIPHeader := make([]byte, 20)
-	newIPHeader[0] = versionAndIHL
-	newIPHeader[1] = 0
-	binary.BigEndian.PutUint16(newIPHeader[2:4], h.TotalLength)
-	binary.BigEndian.PutUint16(newIPHeader[4:6], h.ID)
-	binary.BigEndian.PutUint16(newIPHeader[6:8], flagsAndFragmentOffset)
-	newIPHeader[8] = h.TTL
-	newIPHeader[9] = h.Protocol
-	binary.BigEndian.PutUint16(newIPHeader[10:12], h.Checksum)
-	copy(newIPHeader[12:16], h.SrcIP[:])
-	copy(newIPHeader[16:20], h.DstIP[:])
+	pkt := make([]byte, 20)
+	pkt[0] = versionAndIHL
+	pkt[1] = 0
+	binary.BigEndian.PutUint16(pkt[2:4], h.TotalLength)
+	binary.BigEndian.PutUint16(pkt[4:6], h.ID)
+	binary.BigEndian.PutUint16(pkt[6:8], flagsAndFragmentOffset)
+	pkt[8] = h.TTL
+	pkt[9] = h.Protocol
+	binary.BigEndian.PutUint16(pkt[10:12], h.Checksum)
+	copy(pkt[12:16], h.SrcIP[:])
+	copy(pkt[16:20], h.DstIP[:])
 
-	return newIPHeader
+	return pkt
 }
 
 // Calculates the checksum of the packet and sets Header.
