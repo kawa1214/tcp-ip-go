@@ -15,34 +15,6 @@ import (
 	"github.com/kawa1214/tcp-ip-go/tcp"
 )
 
-type IPHeader struct {
-	Version        uint8
-	IHL            uint8
-	TOS            uint8
-	TotalLength    uint16
-	ID             uint16
-	Flags          uint8
-	FragmentOffset uint16
-	TTL            uint8
-	Protocol       uint8
-	Checksum       uint16
-	SrcIP          [4]byte
-	DstIP          [4]byte
-}
-
-type TCPHeader struct {
-	SrcPort    uint16
-	DstPort    uint16
-	SeqNum     uint32
-	AckNum     uint32
-	DataOff    uint8
-	Reserved   uint8
-	Flags      uint8
-	WindowSize uint16
-	Checksum   uint16
-	UrgentPtr  uint16
-}
-
 func main() {
 	tun, err := socket.NewTun()
 	if err != nil {
@@ -83,7 +55,6 @@ func main() {
 
 			os.Exit(0)
 
-			// time.Sleep(100 * time.Millisecond)
 			// SYNフラグを持っていることを確認
 		} else if tcpHeader.Flags == 0x02 {
 
