@@ -1,0 +1,12 @@
+{
+  "name": "go",
+  "dockerComposeFile": ["./docker-compose.yml"],
+  "service": "ubuntu",
+  "remoteUser": "root",
+  "workspaceFolder": "/var/lib/tcp-ip-go",
+  "customizations": {
+    "vscode": {
+      "extensions": ["golang.go"]
+    }
+  }
+}

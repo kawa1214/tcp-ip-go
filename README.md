@@ -1,29 +1,35 @@
 ## Tutorial
 
-1. Create TUN/TAP
+1. Build docker image
 
 ```sh
-bash tun_tap.sh
+make build
 ```
 
-2. Run main.go
+2. Run docker container
 
 ```sh
-sudo go run main.go
+make up
 ```
 
-3. curl execution
+3. Run main.go(in docker container)
 
 ```sh
-curl --interface tun0 http://10.0.0.2/
+make serve
+```
+
+4. curl execution(in docker container)
+
+```sh
+make curl
 ```
 
 ## Dump Wireshark
 
-1. Packet Monitoring
+1. Packet Monitoring(in docker container)
 
 ```sh
-sudo tcpdump -i tun0 -w capture.pcap
+make capture
 ```
 
 
