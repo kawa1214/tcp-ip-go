@@ -24,7 +24,7 @@ make serve
 make curl
 ```
 
-## Dump Wireshark
+## Dump TCP packets using Wireshark
 
 1. Packet Monitoring(in docker container)
 
@@ -32,5 +32,4 @@ make curl
 make capture
 ```
 
-
-2. Open capture.pcap in wireshark
+2. Open wireshark/capture.pcap in wireshark
