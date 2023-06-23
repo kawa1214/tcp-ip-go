@@ -6,7 +6,13 @@
   "workspaceFolder": "/var/lib/tcp-ip-go",
   "customizations": {
     "vscode": {
-      "extensions": ["golang.go"]
+      "extensions": ["golang.go"],
+      "settings": {
+        "editor.formatOnSave": true,
+        "[go]": {
+          "editor.defaultFormatter": "golang.go"
+        }
+      }
     }
   }
 }
