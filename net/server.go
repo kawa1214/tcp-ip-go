@@ -1,7 +1,6 @@
 package net
 
 import (
-	"context"
 	"log"
 	"math/rand"
 	"sync"
@@ -25,9 +24,12 @@ const (
 )
 
 type Connection struct {
-	SrcPort uint16
-	DstPort uint16
-	State   State
+	SrcPort  uint16
+	DstPort  uint16
+	State    State
+	Pkt      *server.TcpPacket
+	N        uintptr
+	isAccept bool
 }
 
 type StateManager struct {
@@ -41,7 +43,7 @@ func NewStateManager() *StateManager {
 	}
 }
 
-func (s *StateManager) Listen(tun *socket.Tun, ctx context.Context) {
+func (s *StateManager) Listen(tun *socket.Tun) {
 	for {
 		buf := make([]byte, 2048)
 		n, err := tun.Read(buf)
@@ -57,7 +59,6 @@ func (s *StateManager) Listen(tun *socket.Tun, ctx context.Context) {
 		log.Printf("pkt: %+v", pkt)
 
 		if pkt.TcpHeader.Flags.SYN {
-			log.Printf("SYN packet received")
 			newIPHeader := ip.New(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
 			seed := time.Now().UnixNano()
 			r := rand.New(rand.NewSource(seed))
@@ -74,11 +75,11 @@ func (s *StateManager) Listen(tun *socket.Tun, ctx context.Context) {
 
 			s.addConnection(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort)
 			server.Send(tun, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
-			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateSynReceived)
+			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateSynReceived, pkt, n, false)
 		}
 
 		if pkt.TcpHeader.Flags.ACK && s.findState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort) == StateSynReceived {
-			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateEstablished)
+			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateEstablished, pkt, n, false)
 		}
 
 		if pkt.TcpHeader.Flags.PSH && pkt.TcpHeader.Flags.ACK && s.findState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort) == StateEstablished {
@@ -95,22 +96,7 @@ func (s *StateManager) Listen(tun *socket.Tun, ctx context.Context) {
 			)
 			server.Send(tun, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
 
-			// Send HTTP response
-			// Accepで処理する
-			resp := server.NewTextOkResponse("Hello, World!\r\n")
-			payload := resp.String()
-			respNewIPHeader := ip.New(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH+len(payload))
-			respNewTcpHeader := tcp.New(
-				pkt.TcpHeader.DstPort,
-				pkt.TcpHeader.SrcPort,
-				pkt.TcpHeader.AckNum,
-				pkt.TcpHeader.SeqNum+uint32(tcpDataLen),
-				tcp.HeaderFlags{
-					PSH: true,
-					ACK: true,
-				},
-			)
-			server.Send(tun, pkt, &server.TcpPacket{IpHeader: respNewIPHeader, TcpHeader: respNewTcpHeader}, []byte(payload))
+			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateEstablished, pkt, n, true)
 		}
 
 		if pkt.TcpHeader.Flags.FIN && pkt.TcpHeader.Flags.ACK && s.findState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort) == StateEstablished {
@@ -126,7 +112,7 @@ func (s *StateManager) Listen(tun *socket.Tun, ctx context.Context) {
 			)
 
 			server.Send(tun, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
-			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateCloseWait)
+			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateCloseWait, pkt, n, false)
 
 			finNewIPHeader := ip.New(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
 			finNewTcpHeader := tcp.New(
@@ -140,7 +126,7 @@ func (s *StateManager) Listen(tun *socket.Tun, ctx context.Context) {
 				},
 			)
 			server.Send(tun, pkt, &server.TcpPacket{IpHeader: finNewIPHeader, TcpHeader: finNewTcpHeader}, nil)
-			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateLastAck)
+			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateLastAck, pkt, n, false)
 		}
 
 		if pkt.TcpHeader.Flags.ACK && s.findState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort) == StateLastAck {
@@ -158,8 +144,15 @@ func (s *StateManager) findState(srcPort, dstPort uint16) State {
 	return StateClosed
 }
 
-func (s *StateManager) Accept() bool {
-	return false
+func (s *StateManager) Accept() Connection {
+	for {
+		for _, conn := range s.Connections {
+			if conn.isAccept {
+				s.updateState(conn.SrcPort, conn.DstPort, conn.State, conn.Pkt, conn.N, false)
+				return conn
+			}
+		}
+	}
 }
 
 func (s *StateManager) addConnection(srcPort, dstPort uint16) {
@@ -185,13 +178,17 @@ func (s *StateManager) removeConnection(srcPort, dstPort uint16) {
 	}
 }
 
-func (s *StateManager) updateState(srcPort, dstPort uint16, newState State) {
+func (s *StateManager) updateState(srcPort, dstPort uint16, newState State, pkt *server.TcpPacket, n uintptr, isAccept bool) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	for i, conn := range s.Connections {
 		if conn.SrcPort == srcPort && conn.DstPort == dstPort {
 			s.Connections[i].State = newState
+			s.Connections[i].Pkt = pkt
+			s.Connections[i].N = n
+			s.Connections[i].isAccept = isAccept
+
 			return
 		}
 	}
