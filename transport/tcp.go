@@ -15,7 +15,7 @@ type TcpPacket struct {
 
 type TcpPacketQueue struct {
 	manager    *ConnectionManager
-	packetChan chan TcpPacket
+	incomingQueue chan TcpPacket
 }
 
 func NewTcpPacketQueue() *TcpPacketQueue {
@@ -27,12 +27,12 @@ func NewTcpPacketQueue() *TcpPacketQueue {
 
 func (q *TcpPacketQueue) QueuePacket(ipPacketQueue *network.IpPacketQueue) {
 	packets := make(chan TcpPacket, 10)
-	q.packetChan = packets
+	q.incomingQueue = packets
 
 	go func() {
 		for {
 			select {
-			case ipPkt := <-ipPacketQueue.PacketChan():
+			case ipPkt := <-ipPacketQueue.IncomingQueue():
 				log.Printf("transport pkt: %d", ipPkt.Packet.N)
 				tcpHeader, err := Parse(ipPkt.Packet.Buf[ipPkt.IpHeader.IHL*4 : ipPkt.Packet.N])
 				if err != nil {

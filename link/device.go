@@ -16,5 +16,5 @@ type NetDevice interface {
 	Read([]byte) (uintptr, error)
 	Write([]byte) (uintptr, error)
 	Bind()
-	PacketChan() chan Packet
+	IncomingQueue() chan Packet
 }
