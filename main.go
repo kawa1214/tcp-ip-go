@@ -7,17 +7,25 @@ import (
 	"github.com/kawa1214/tcp-ip-go/net"
 	"github.com/kawa1214/tcp-ip-go/network"
 	"github.com/kawa1214/tcp-ip-go/server"
-	"github.com/kawa1214/tcp-ip-go/tcp"
+	"github.com/kawa1214/tcp-ip-go/transport"
 )
 
 func main() {
 	d, err := link.NewTun()
-	s := net.NewStateManager()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer d.Close()
 
+	d.Bind()
+
+	network.Recv(d)
+
+	for {
+
+	}
+
+	s := net.NewStateManager()
 	go s.Listen(d)
 
 	for {
@@ -29,13 +37,13 @@ func main() {
 		tcpDataLen := int(n) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
 		resp := server.NewTextOkResponse("Hello, World!\r\n")
 		payload := resp.String()
-		respNewIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH+len(payload))
-		respNewTcpHeader := tcp.New(
+		respNewIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, transport.LENGTH+len(payload))
+		respNewTcpHeader := transport.New(
 			pkt.TcpHeader.DstPort,
 			pkt.TcpHeader.SrcPort,
 			pkt.TcpHeader.AckNum,
 			pkt.TcpHeader.SeqNum+uint32(tcpDataLen),
-			tcp.HeaderFlags{
+			transport.HeaderFlags{
 				PSH: true,
 				ACK: true,
 			},

@@ -3,12 +3,12 @@ package server
 import (
 	"github.com/kawa1214/tcp-ip-go/link"
 	"github.com/kawa1214/tcp-ip-go/network"
-	"github.com/kawa1214/tcp-ip-go/tcp"
+	"github.com/kawa1214/tcp-ip-go/transport"
 )
 
 type TcpPacket struct {
 	IpHeader  *network.Header
-	TcpHeader *tcp.Header
+	TcpHeader *transport.Header
 }
 
 // Parse packet and returns ip and tcp headers.
@@ -18,7 +18,7 @@ func Parse(pkt []byte, length uintptr) (*TcpPacket, error) {
 		return nil, err
 	}
 
-	tcpHeader, err := tcp.Parse(pkt[ipHeader.IHL*4 : length])
+	tcpHeader, err := transport.Parse(pkt[ipHeader.IHL*4 : length])
 	if err != nil {
 		return nil, err
 	}

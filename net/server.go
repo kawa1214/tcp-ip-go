@@ -9,7 +9,7 @@ import (
 	"github.com/kawa1214/tcp-ip-go/link"
 	"github.com/kawa1214/tcp-ip-go/network"
 	"github.com/kawa1214/tcp-ip-go/server"
-	"github.com/kawa1214/tcp-ip-go/tcp"
+	"github.com/kawa1214/tcp-ip-go/transport"
 )
 
 type State int
@@ -59,15 +59,15 @@ func (s *StateManager) Listen(d link.NetDevice) {
 		log.Printf("pkt: %+v", pkt)
 
 		if pkt.TcpHeader.Flags.SYN {
-			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
+			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, transport.LENGTH)
 			seed := time.Now().UnixNano()
 			r := rand.New(rand.NewSource(seed))
-			newTcpHeader := tcp.New(
+			newTcpHeader := transport.New(
 				pkt.TcpHeader.DstPort,
 				pkt.TcpHeader.SrcPort,
 				uint32(r.Int31()),
 				pkt.TcpHeader.SeqNum+1,
-				tcp.HeaderFlags{
+				transport.HeaderFlags{
 					SYN: true,
 					ACK: true,
 				},
@@ -83,14 +83,14 @@ func (s *StateManager) Listen(d link.NetDevice) {
 		}
 
 		if pkt.TcpHeader.Flags.PSH && pkt.TcpHeader.Flags.ACK && s.findState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort) == StateEstablished {
-			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
+			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, transport.LENGTH)
 			tcpDataLen := int(n) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
-			newTcpHeader := tcp.New(
+			newTcpHeader := transport.New(
 				pkt.TcpHeader.DstPort,
 				pkt.TcpHeader.SrcPort,
 				pkt.TcpHeader.AckNum,
 				pkt.TcpHeader.SeqNum+uint32(tcpDataLen),
-				tcp.HeaderFlags{
+				transport.HeaderFlags{
 					ACK: true,
 				},
 			)
@@ -100,13 +100,13 @@ func (s *StateManager) Listen(d link.NetDevice) {
 		}
 
 		if pkt.TcpHeader.Flags.FIN && pkt.TcpHeader.Flags.ACK && s.findState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort) == StateEstablished {
-			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
-			newTcpHeader := tcp.New(
+			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, transport.LENGTH)
+			newTcpHeader := transport.New(
 				pkt.TcpHeader.DstPort,
 				pkt.TcpHeader.SrcPort,
 				pkt.TcpHeader.AckNum,
 				pkt.TcpHeader.SeqNum+1,
-				tcp.HeaderFlags{
+				transport.HeaderFlags{
 					ACK: true,
 				},
 			)
@@ -114,13 +114,13 @@ func (s *StateManager) Listen(d link.NetDevice) {
 			server.Send(d, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
 			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateCloseWait, pkt, n, false)
 
-			finNewIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
-			finNewTcpHeader := tcp.New(
+			finNewIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, transport.LENGTH)
+			finNewTcpHeader := transport.New(
 				pkt.TcpHeader.DstPort,
 				pkt.TcpHeader.SrcPort,
 				pkt.TcpHeader.AckNum,
 				pkt.TcpHeader.SeqNum+1,
-				tcp.HeaderFlags{
+				transport.HeaderFlags{
 					FIN: true,
 					ACK: true,
 				},
