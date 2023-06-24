@@ -6,10 +6,15 @@ const (
 	IFF_NO_PI = 0x1000
 )
 
+type Packet struct {
+	Buf []byte
+	N   uintptr
+}
+
 type NetDevice interface {
 	Close() error
 	Read([]byte) (uintptr, error)
 	Write([]byte) (uintptr, error)
 	Bind()
-	PacketChan() chan *packet
+	PacketChan() chan Packet
 }

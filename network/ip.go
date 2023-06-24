@@ -110,6 +110,11 @@ func (h *Header) SetChecksum(pkt []byte) {
 	h.Checksum = ^uint16(checksum)
 }
 
+type IpPacket struct {
+	IpHeader  *Header
+	Packet link.Packet
+}
+
 func Recv(d link.NetDevice) {
 	go func() {
 		for {
@@ -121,10 +126,12 @@ func Recv(d link.NetDevice) {
 					log.Printf("parse error: %s", err)
 					continue
 				}
-				log.Printf("ipHeader: %+v", ipHeader)
-
+				ipPacket := IpPacket{
+					IpHeader: ipHeader,
+					Packet: pkt,
+				}
+				log.Printf("ipPacket: %+v", ipPacket)
 			}
-
 		}
 	}()
 }
