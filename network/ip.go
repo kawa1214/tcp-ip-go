@@ -1,4 +1,4 @@
-package ip
+package network
 
 import (
 	"encoding/binary"
@@ -55,7 +55,7 @@ func Parse(pkt []byte) (*Header, error) {
 }
 
 // Create a new IP header.
-func New(srcIP, dstIP [4]byte, len int) *Header {
+func NewIp(srcIP, dstIP [4]byte, len int) *Header {
 	return &Header{
 		Version:     IP_VERSION,
 		IHL:         IHL,

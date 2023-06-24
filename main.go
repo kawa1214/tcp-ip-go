@@ -3,22 +3,22 @@ package main
 import (
 	"log"
 
-	"github.com/kawa1214/tcp-ip-go/ip"
+	"github.com/kawa1214/tcp-ip-go/link"
 	"github.com/kawa1214/tcp-ip-go/net"
+	"github.com/kawa1214/tcp-ip-go/network"
 	"github.com/kawa1214/tcp-ip-go/server"
-	"github.com/kawa1214/tcp-ip-go/socket"
 	"github.com/kawa1214/tcp-ip-go/tcp"
 )
 
 func main() {
-	tun, err := socket.NewTun()
+	d, err := link.NewTun()
 	s := net.NewStateManager()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer tun.Close()
+	defer d.Close()
 
-	go s.Listen(tun)
+	go s.Listen(d)
 
 	for {
 		conn := s.Accept()
@@ -29,7 +29,7 @@ func main() {
 		tcpDataLen := int(n) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
 		resp := server.NewTextOkResponse("Hello, World!\r\n")
 		payload := resp.String()
-		respNewIPHeader := ip.New(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH+len(payload))
+		respNewIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH+len(payload))
 		respNewTcpHeader := tcp.New(
 			pkt.TcpHeader.DstPort,
 			pkt.TcpHeader.SrcPort,
@@ -40,6 +40,6 @@ func main() {
 				ACK: true,
 			},
 		)
-		server.Send(tun, pkt, &server.TcpPacket{IpHeader: respNewIPHeader, TcpHeader: respNewTcpHeader}, []byte(payload))
+		server.Send(d, pkt, &server.TcpPacket{IpHeader: respNewIPHeader, TcpHeader: respNewTcpHeader}, []byte(payload))
 	}
 }

@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kawa1214/tcp-ip-go/ip"
+	"github.com/kawa1214/tcp-ip-go/link"
+	"github.com/kawa1214/tcp-ip-go/network"
 	"github.com/kawa1214/tcp-ip-go/server"
-	"github.com/kawa1214/tcp-ip-go/socket"
 	"github.com/kawa1214/tcp-ip-go/tcp"
 )
 
@@ -43,10 +43,10 @@ func NewStateManager() *StateManager {
 	}
 }
 
-func (s *StateManager) Listen(tun *socket.Tun) {
+func (s *StateManager) Listen(d link.NetDevice) {
 	for {
 		buf := make([]byte, 2048)
-		n, err := tun.Read(buf)
+		n, err := d.Read(buf)
 		if err != nil {
 			panic(err)
 		}
@@ -59,7 +59,7 @@ func (s *StateManager) Listen(tun *socket.Tun) {
 		log.Printf("pkt: %+v", pkt)
 
 		if pkt.TcpHeader.Flags.SYN {
-			newIPHeader := ip.New(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
+			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
 			seed := time.Now().UnixNano()
 			r := rand.New(rand.NewSource(seed))
 			newTcpHeader := tcp.New(
@@ -74,7 +74,7 @@ func (s *StateManager) Listen(tun *socket.Tun) {
 			)
 
 			s.addConnection(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort)
-			server.Send(tun, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
+			server.Send(d, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
 			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateSynReceived, pkt, n, false)
 		}
 
@@ -83,7 +83,7 @@ func (s *StateManager) Listen(tun *socket.Tun) {
 		}
 
 		if pkt.TcpHeader.Flags.PSH && pkt.TcpHeader.Flags.ACK && s.findState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort) == StateEstablished {
-			newIPHeader := ip.New(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
+			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
 			tcpDataLen := int(n) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
 			newTcpHeader := tcp.New(
 				pkt.TcpHeader.DstPort,
@@ -94,13 +94,13 @@ func (s *StateManager) Listen(tun *socket.Tun) {
 					ACK: true,
 				},
 			)
-			server.Send(tun, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
+			server.Send(d, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
 
 			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateEstablished, pkt, n, true)
 		}
 
 		if pkt.TcpHeader.Flags.FIN && pkt.TcpHeader.Flags.ACK && s.findState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort) == StateEstablished {
-			newIPHeader := ip.New(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
+			newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
 			newTcpHeader := tcp.New(
 				pkt.TcpHeader.DstPort,
 				pkt.TcpHeader.SrcPort,
@@ -111,10 +111,10 @@ func (s *StateManager) Listen(tun *socket.Tun) {
 				},
 			)
 
-			server.Send(tun, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
+			server.Send(d, pkt, &server.TcpPacket{IpHeader: newIPHeader, TcpHeader: newTcpHeader}, nil)
 			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateCloseWait, pkt, n, false)
 
-			finNewIPHeader := ip.New(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
+			finNewIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, tcp.LENGTH)
 			finNewTcpHeader := tcp.New(
 				pkt.TcpHeader.DstPort,
 				pkt.TcpHeader.SrcPort,
@@ -125,7 +125,7 @@ func (s *StateManager) Listen(tun *socket.Tun) {
 					ACK: true,
 				},
 			)
-			server.Send(tun, pkt, &server.TcpPacket{IpHeader: finNewIPHeader, TcpHeader: finNewTcpHeader}, nil)
+			server.Send(d, pkt, &server.TcpPacket{IpHeader: finNewIPHeader, TcpHeader: finNewTcpHeader}, nil)
 			s.updateState(pkt.TcpHeader.DstPort, pkt.TcpHeader.SrcPort, StateLastAck, pkt, n, false)
 		}
 

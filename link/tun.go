@@ -1,4 +1,4 @@
-package socket
+package link
 
 import (
 	"fmt"
@@ -12,6 +12,12 @@ const (
 	IFF_TUN   = 0x0001
 	IFF_NO_PI = 0x1000
 )
+
+type NetDevice interface {
+	Close() error
+	Read([]byte) (uintptr, error)
+	Write([]byte) (uintptr, error)
+}
 
 type Ifreq struct {
 	IfrName  [16]byte

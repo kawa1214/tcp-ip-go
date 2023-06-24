@@ -1,19 +1,19 @@
 package server
 
 import (
-	"github.com/kawa1214/tcp-ip-go/ip"
-	"github.com/kawa1214/tcp-ip-go/socket"
+	"github.com/kawa1214/tcp-ip-go/link"
+	"github.com/kawa1214/tcp-ip-go/network"
 	"github.com/kawa1214/tcp-ip-go/tcp"
 )
 
 type TcpPacket struct {
-	IpHeader  *ip.Header
+	IpHeader  *network.Header
 	TcpHeader *tcp.Header
 }
 
 // Parse packet and returns ip and tcp headers.
 func Parse(pkt []byte, length uintptr) (*TcpPacket, error) {
-	ipHeader, err := ip.Parse(pkt[:length])
+	ipHeader, err := network.Parse(pkt[:length])
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func Parse(pkt []byte, length uintptr) (*TcpPacket, error) {
 }
 
 // Send packet.
-func Send(socket *socket.Tun, from, to *TcpPacket, data []byte) error {
+func Send(d link.NetDevice, from, to *TcpPacket, data []byte) error {
 	ip := to.IpHeader.Marshal()
 	to.IpHeader.SetChecksum(ip)
 	ip = to.IpHeader.Marshal()
@@ -42,7 +42,7 @@ func Send(socket *socket.Tun, from, to *TcpPacket, data []byte) error {
 	pkt := append(ip, tcp...)
 	pkt = append(pkt, data...)
 
-	_, err := socket.Write(pkt)
+	_, err := d.Write(pkt)
 	if err != nil {
 		return err
 	}

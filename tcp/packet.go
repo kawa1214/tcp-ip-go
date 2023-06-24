@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/kawa1214/tcp-ip-go/ip"
+	"github.com/kawa1214/tcp-ip-go/network"
 )
 
 const (
@@ -96,7 +96,7 @@ func (h *Header) Marshal() []byte {
 }
 
 // Calculates the checksum of the packet and sets Header.
-func (h *Header) SetChecksum(ipHeader ip.Header, pkt []byte) {
+func (h *Header) SetChecksum(ipHeader network.Header, pkt []byte) {
 	pseudoHeader := make([]byte, 12)
 	copy(pseudoHeader[0:4], ipHeader.SrcIP[:])
 	copy(pseudoHeader[4:8], ipHeader.DstIP[:])
