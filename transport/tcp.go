@@ -3,21 +3,26 @@ package transport
 import (
 	"log"
 
+	"github.com/kawa1214/tcp-ip-go/link"
 	"github.com/kawa1214/tcp-ip-go/network"
 )
 
 type TcpPacket struct {
 	IpHeader  *network.Header
 	TcpHeader *Header
-	Packet    network.IpPacket
+	Packet    link.Packet
 }
 
 type TcpPacketQueue struct {
+	manager    *ConnectionManager
 	packetChan chan TcpPacket
 }
 
 func NewTcpPacketQueue() *TcpPacketQueue {
-	return &TcpPacketQueue{}
+	ConnectionManager := NewConnectionManager()
+	return &TcpPacketQueue{
+		manager: ConnectionManager,
+	}
 }
 
 func (q *TcpPacketQueue) QueuePacket(ipPacketQueue *network.IpPacketQueue) {
@@ -37,10 +42,10 @@ func (q *TcpPacketQueue) QueuePacket(ipPacketQueue *network.IpPacketQueue) {
 				tcpPacket := TcpPacket{
 					IpHeader:  ipPkt.IpHeader,
 					TcpHeader: tcpHeader,
-					Packet:    ipPkt,
+					Packet:    ipPkt.Packet,
 				}
-				log.Printf("tcpPacket flags: %+v", tcpPacket.TcpHeader.Flags)
 				packets <- tcpPacket
+				q.manager.recv(tcpPacket)
 			}
 		}
 	}()
