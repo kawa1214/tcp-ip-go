@@ -14,14 +14,14 @@ type ifreq struct {
 }
 
 type Tun struct {
-	file   *os.File
-	ifreq  *ifreq
-	packet chan *packet
+	file       *os.File
+	ifreq      *ifreq
+	packetChan chan *packet
 }
 
 type packet struct {
-	buf []byte
-	n   uintptr
+	Buf []byte
+	N   uintptr
 }
 
 // NewTun creates and initializes a new TUN device.
@@ -74,6 +74,7 @@ func (t *Tun) Write(buf []byte) (uintptr, error) {
 // Bind TUN Device.
 func (t *Tun) Bind() {
 	packets := make(chan *packet, 10)
+	t.packetChan = packets
 	go func() {
 		for {
 			buf := make([]byte, 2048)
@@ -81,12 +82,16 @@ func (t *Tun) Bind() {
 			if err != nil {
 				log.Printf("read error: %s", err.Error())
 			}
-			log.Printf("read: %d", n)
+			log.Printf("link read: %d", n)
 			packet := &packet{
-				buf: buf,
-				n:   n,
+				Buf: buf,
+				N:   n,
 			}
 			packets <- packet
 		}
 	}()
+}
+
+func (t *Tun) PacketChan() chan *packet {
+	return t.packetChan
 }

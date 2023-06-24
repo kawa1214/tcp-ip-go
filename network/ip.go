@@ -3,6 +3,9 @@ package network
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
+
+	"github.com/kawa1214/tcp-ip-go/link"
 )
 
 type Header struct {
@@ -105,4 +108,23 @@ func (h *Header) SetChecksum(pkt []byte) {
 	}
 
 	h.Checksum = ^uint16(checksum)
+}
+
+func Recv(d link.NetDevice) {
+	go func() {
+		for {
+			select {
+			case pkt := <-d.PacketChan():
+				log.Printf("network pkt: %d", pkt.N)
+				ipHeader, err := Parse(pkt.Buf[:pkt.N])
+				if err != nil {
+					log.Printf("parse error: %s", err)
+					continue
+				}
+				log.Printf("ipHeader: %+v", ipHeader)
+
+			}
+
+		}
+	}()
 }
