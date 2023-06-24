@@ -2,31 +2,26 @@ package link
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"syscall"
 	"unsafe"
 )
 
-const (
-	TUNSETIFF = 0x400454ca
-	IFF_TUN   = 0x0001
-	IFF_NO_PI = 0x1000
-)
-
-type NetDevice interface {
-	Close() error
-	Read([]byte) (uintptr, error)
-	Write([]byte) (uintptr, error)
-}
-
-type Ifreq struct {
-	IfrName  [16]byte
-	IfrFlags int16
+type ifreq struct {
+	ifrName  [16]byte
+	ifrFlags int16
 }
 
 type Tun struct {
-	file  *os.File
-	ifreq *Ifreq
+	file   *os.File
+	ifreq  *ifreq
+	packet chan *packet
+}
+
+type packet struct {
+	buf []byte
+	n   uintptr
 }
 
 // NewTun creates and initializes a new TUN device.
@@ -36,9 +31,9 @@ func NewTun() (*Tun, error) {
 		return nil, fmt.Errorf("open error: %s", err.Error())
 	}
 
-	ifr := Ifreq{}
-	copy(ifr.IfrName[:], []byte("tun0"))
-	ifr.IfrFlags = IFF_TUN | IFF_NO_PI
+	ifr := ifreq{}
+	copy(ifr.ifrName[:], []byte("tun0"))
+	ifr.ifrFlags = IFF_TUN | IFF_NO_PI
 
 	_, _, sysErr := syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), uintptr(TUNSETIFF), uintptr(unsafe.Pointer(&ifr)))
 	if sysErr != 0 {
@@ -74,4 +69,24 @@ func (t *Tun) Write(buf []byte) (uintptr, error) {
 	}
 
 	return n, nil
+}
+
+// Bind TUN Device.
+func (t *Tun) Bind() {
+	packets := make(chan *packet, 10)
+	go func() {
+		for {
+			buf := make([]byte, 2048)
+			n, err := t.Read(buf)
+			if err != nil {
+				log.Printf("read error: %s", err.Error())
+			}
+			log.Printf("read: %d", n)
+			packet := &packet{
+				buf: buf,
+				n:   n,
+			}
+			packets <- packet
+		}
+	}()
 }
