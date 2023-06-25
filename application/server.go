@@ -46,7 +46,7 @@ func (s *Server) Close() {
 }
 
 func (s *Server) Accept() (transport.Connection, error) {
-	conn, err := s.tcpPacketQueue.ReadConnection()
+	conn, err := s.tcpPacketQueue.ReadAcceptConnection()
 	if err != nil {
 		return transport.Connection{}, fmt.Errorf("accept error: %s", err)
 	}

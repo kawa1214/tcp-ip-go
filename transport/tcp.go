@@ -98,8 +98,8 @@ func (tcp *TcpPacketQueue) Write(from, to TcpPacket, data []byte) {
 	}
 }
 
-func (tcp *TcpPacketQueue) ReadConnection() (Connection, error) {
-	pkt, ok := <-tcp.manager.ConnectionQueue
+func (tcp *TcpPacketQueue) ReadAcceptConnection() (Connection, error) {
+	pkt, ok := <-tcp.manager.AcceptConnectionQueue
 	if !ok {
 		return Connection{}, fmt.Errorf("connection queue is closed")
 	}

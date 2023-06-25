@@ -7,7 +7,6 @@ import (
 )
 
 func main() {
-
 	s := application.NewServer()
 	defer s.Close()
 	s.ListenAndServe()

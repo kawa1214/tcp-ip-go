@@ -30,16 +30,15 @@ type Connection struct {
 }
 
 type ConnectionManager struct {
-	Connections     []Connection
-	ConnectionQueue chan Connection
-	lock            sync.Mutex
+	Connections           []Connection
+	AcceptConnectionQueue chan Connection
+	lock                  sync.Mutex
 }
 
 func NewConnectionManager() *ConnectionManager {
-	conns := make(chan Connection, 10)
 	return &ConnectionManager{
-		Connections:     make([]Connection, 0),
-		ConnectionQueue: conns,
+		Connections:           make([]Connection, 0),
+		AcceptConnectionQueue: make(chan Connection, QUEUE_SIZE),
 	}
 }
 
@@ -101,7 +100,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 		queue.Write(pkt, sendPkt, nil)
 		m.update(pkt, StateEstablished, true)
 
-		m.ConnectionQueue <- conn
+		m.AcceptConnectionQueue <- conn
 	}
 
 	if ok && pkt.TcpHeader.Flags.FIN && conn.State == StateEstablished {
