@@ -45,7 +45,7 @@ func NewConnectionManager() *ConnectionManager {
 
 func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 	conn, ok := m.find(pkt)
-	if (ok) {
+	if ok {
 		conn.Pkt = pkt
 	}
 

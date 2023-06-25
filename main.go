@@ -14,7 +14,7 @@ func main() {
 
 	for {
 		conn := s.Accept()
-		
+
 		reqRaw := string(conn.Pkt.Packet.Buf[conn.Pkt.IpHeader.IHL*4+conn.Pkt.TcpHeader.DataOff*4:])
 		req, err := application.ParseHTTPRequest(reqRaw)
 		if err != nil {
@@ -23,7 +23,7 @@ func main() {
 		}
 
 		log.Printf("request: %v", req)
-		if (req.Method == "GET" && req.URI == "/") {
+		if req.Method == "GET" && req.URI == "/" {
 			resp := application.NewTextOkResponse("Hello, World!\r\n")
 			s.Write(conn, resp)
 		}
