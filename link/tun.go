@@ -62,6 +62,7 @@ func (t *NetDevice) Close() error {
 	if err != nil {
 		return fmt.Errorf("close error: %s", err.Error())
 	}
+	t.cancel()
 
 	return nil
 }
