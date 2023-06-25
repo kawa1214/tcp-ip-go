@@ -13,19 +13,23 @@ type IpPacket struct {
 
 type IpPacketQueue struct {
 	incomingQueue chan IpPacket
+	outgoingQueue chan link.Packet
 }
 
 func NewIpPacketQueue() *IpPacketQueue {
 	return &IpPacketQueue{}
 }
 
-func (q *IpPacketQueue) QueuePacket(d link.NetDevice) {
+func (ip *IpPacketQueue) ManageQueues(device link.NetDevice) {
 	packets := make(chan IpPacket, 10)
-	q.incomingQueue = packets
+	ip.incomingQueue = packets
+
+	outPackets := make(chan link.Packet, 10)
+	ip.outgoingQueue = outPackets
 	go func() {
 		for {
 			select {
-			case pkt := <-d.IncomingQueue():
+			case pkt := <-device.IncomingQueue():
 				log.Printf("network pkt: %d", pkt.N)
 				ipHeader, err := Parse(pkt.Buf[:pkt.N])
 				if err != nil {
@@ -40,8 +44,22 @@ func (q *IpPacketQueue) QueuePacket(d link.NetDevice) {
 			}
 		}
 	}()
+
+	go func() {
+		for {
+			select {
+			case pkt := <-ip.outgoingQueue:
+				log.Printf("network write: %d", pkt.N)
+				device.OutgoingQueue() <- pkt
+			}
+		}
+	}()
 }
 
 func (q *IpPacketQueue) IncomingQueue() chan IpPacket {
 	return q.incomingQueue
+}
+
+func (q *IpPacketQueue) OutgoingQueue() chan link.Packet {
+	return q.outgoingQueue
 }

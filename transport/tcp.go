@@ -14,8 +14,9 @@ type TcpPacket struct {
 }
 
 type TcpPacketQueue struct {
-	manager    *ConnectionManager
-	incomingQueue chan TcpPacket
+	manager *ConnectionManager
+	// incomingQueue chan TcpPacket
+	outgoingQueue chan link.Packet
 }
 
 func NewTcpPacketQueue() *TcpPacketQueue {
@@ -25,14 +26,14 @@ func NewTcpPacketQueue() *TcpPacketQueue {
 	}
 }
 
-func (q *TcpPacketQueue) QueuePacket(ipPacketQueue *network.IpPacketQueue) {
-	packets := make(chan TcpPacket, 10)
-	q.incomingQueue = packets
+func (tcp *TcpPacketQueue) ManageQueues(ip *network.IpPacketQueue) {
+	packets := make(chan link.Packet, 10)
+	tcp.outgoingQueue = packets
 
 	go func() {
 		for {
 			select {
-			case ipPkt := <-ipPacketQueue.IncomingQueue():
+			case ipPkt := <-ip.IncomingQueue():
 				log.Printf("transport pkt: %d", ipPkt.Packet.N)
 				tcpHeader, err := Parse(ipPkt.Packet.Buf[ipPkt.IpHeader.IHL*4 : ipPkt.Packet.N])
 				if err != nil {
@@ -44,9 +45,39 @@ func (q *TcpPacketQueue) QueuePacket(ipPacketQueue *network.IpPacketQueue) {
 					TcpHeader: tcpHeader,
 					Packet:    ipPkt.Packet,
 				}
-				packets <- tcpPacket
-				q.manager.recv(tcpPacket)
+
+				tcp.manager.recv(tcp, tcpPacket)
 			}
 		}
 	}()
+
+	go func() {
+		for {
+			select {
+			case pkt := <-tcp.outgoingQueue:
+				log.Printf("transport write: %d", pkt.N)
+				ip.OutgoingQueue() <- pkt
+			}
+		}
+	}()
+}
+
+func (tcp *TcpPacketQueue) send(from, to TcpPacket, data []byte) {
+	log.Printf("send: %d", to.Packet.N)
+
+	ipHdr := to.IpHeader.Marshal()
+	to.IpHeader.SetChecksum(ipHdr)
+	ipHdr = to.IpHeader.Marshal()
+
+	tcpHdr := to.TcpHeader.Marshal()
+	to.TcpHeader.SetChecksum(*from.IpHeader, append(tcpHdr, data...))
+	tcpHdr = to.TcpHeader.Marshal()
+
+	pkt := append(ipHdr, tcpHdr...)
+	pkt = append(pkt, data...)
+
+	tcp.outgoingQueue <- link.Packet{
+		Buf: pkt,
+		N:   uintptr(len(pkt)),
+	}
 }

@@ -9,19 +9,19 @@ import (
 )
 
 func main() {
-	d, err := link.NewTun()
+	link, err := link.NewTun()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer d.Close()
+	defer link.Close()
 
-	d.Bind()
+	link.Bind()
 
 	ipPacketQueue := network.NewIpPacketQueue()
-	ipPacketQueue.QueuePacket(d)
+	ipPacketQueue.ManageQueues(link)
 
 	tcpPacketQueue := transport.NewTcpPacketQueue()
-	tcpPacketQueue.QueuePacket(ipPacketQueue)
+	tcpPacketQueue.ManageQueues(ipPacketQueue)
 
 	for {
 
