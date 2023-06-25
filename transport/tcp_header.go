@@ -78,7 +78,7 @@ func New(srcPort, dstPort uint16, seqNum, ackNum uint32, flags HeaderFlags) *Hea
 }
 
 // Return a byte slice of the packet.
-func (h *Header) Marshal() []byte {
+func (h *Header) Marshal(ipHdr *network.Header, data []byte) []byte {
 	f := h.Flags.marshal()
 
 	pkt := make([]byte, 20)
@@ -92,11 +92,14 @@ func (h *Header) Marshal() []byte {
 	binary.BigEndian.PutUint16(pkt[16:18], h.Checksum)
 	binary.BigEndian.PutUint16(pkt[18:20], h.UrgentPtr)
 
+	h.setChecksum(ipHdr, append(pkt, data...))
+	binary.BigEndian.PutUint16(pkt[16:18], h.Checksum)
+
 	return pkt
 }
 
 // Calculates the checksum of the packet and sets Header.
-func (h *Header) SetChecksum(ipHeader network.Header, pkt []byte) {
+func (h *Header) setChecksum(ipHeader *network.Header, pkt []byte) {
 	pseudoHeader := make([]byte, 12)
 	copy(pseudoHeader[0:4], ipHeader.SrcIP[:])
 	copy(pseudoHeader[4:8], ipHeader.DstIP[:])

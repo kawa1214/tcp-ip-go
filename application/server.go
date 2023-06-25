@@ -39,6 +39,7 @@ func (s *Server) serve() {
 
 func (s *Server) Close() error {
 	s.link.Close()
+	s.ipPacketQueue.Close()
 	return nil
 }
 

@@ -21,17 +21,18 @@ type Header struct {
 }
 
 const (
-	IP_VERSION   = 4
-	IHL          = 5
-	TOS          = 0
-	TTL          = 64
-	LENGTH       = IHL * 4
-	TCP_PROTOCOL = 6
+	IP_VERSION        = 4
+	IHL               = 5
+	TOS               = 0
+	TTL               = 64
+	LENGTH            = IHL * 4
+	TCP_PROTOCOL      = 6
+	IP_HEADER_MIN_LEN = 20
 )
 
 // New creates a new IP header from packet.
 func Parse(pkt []byte) (*Header, error) {
-	if len(pkt) < 20 {
+	if len(pkt) < IP_HEADER_MIN_LEN {
 		return nil, fmt.Errorf("invalid IP header length")
 	}
 
@@ -88,11 +89,14 @@ func (h *Header) Marshal() []byte {
 	copy(pkt[12:16], h.SrcIP[:])
 	copy(pkt[16:20], h.DstIP[:])
 
+	h.setChecksum(pkt)
+	binary.BigEndian.PutUint16(pkt[10:12], h.Checksum)
+
 	return pkt
 }
 
 // Calculates the checksum of the packet and sets Header.
-func (h *Header) SetChecksum(pkt []byte) {
+func (h *Header) setChecksum(pkt []byte) {
 	length := len(pkt)
 	var checksum uint32
 

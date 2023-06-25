@@ -32,22 +32,23 @@ func (tcp *TcpPacketQueue) ManageQueues(ip *network.IpPacketQueue) {
 
 	go func() {
 		for {
-			select {
-			case ipPkt := <-ip.IncomingQueue():
-				log.Printf("transport pkt: %d", ipPkt.Packet.N)
-				tcpHeader, err := Parse(ipPkt.Packet.Buf[ipPkt.IpHeader.IHL*4 : ipPkt.Packet.N])
-				if err != nil {
-					log.Printf("parse error: %s", err)
-					continue
-				}
-				tcpPacket := TcpPacket{
-					IpHeader:  ipPkt.IpHeader,
-					TcpHeader: tcpHeader,
-					Packet:    ipPkt.Packet,
-				}
-
-				tcp.manager.recv(tcp, tcpPacket)
+			ipPkt, err := ip.Read()
+			if err != nil {
+				log.Printf("read error: %s", err.Error())
 			}
+			log.Printf("transport pkt: %d", ipPkt.Packet.N)
+			tcpHeader, err := Parse(ipPkt.Packet.Buf[ipPkt.IpHeader.IHL*4 : ipPkt.Packet.N])
+			if err != nil {
+				log.Printf("parse error: %s", err)
+				continue
+			}
+			tcpPacket := TcpPacket{
+				IpHeader:  ipPkt.IpHeader,
+				TcpHeader: tcpHeader,
+				Packet:    ipPkt.Packet,
+			}
+
+			tcp.manager.recv(tcp, tcpPacket)
 		}
 	}()
 
@@ -56,7 +57,10 @@ func (tcp *TcpPacketQueue) ManageQueues(ip *network.IpPacketQueue) {
 			select {
 			case pkt := <-tcp.outgoingQueue:
 				log.Printf("transport write: %d", pkt.N)
-				ip.OutgoingQueue() <- pkt
+				err := ip.Write(pkt)
+				if err != nil {
+					log.Printf("write error: %s", err.Error())
+				}
 			}
 		}
 	}()
@@ -66,12 +70,7 @@ func (tcp *TcpPacketQueue) Write(from, to TcpPacket, data []byte) {
 	log.Printf("Write: %d", to.Packet.N)
 
 	ipHdr := to.IpHeader.Marshal()
-	to.IpHeader.SetChecksum(ipHdr)
-	ipHdr = to.IpHeader.Marshal()
-
-	tcpHdr := to.TcpHeader.Marshal()
-	to.TcpHeader.SetChecksum(*from.IpHeader, append(tcpHdr, data...))
-	tcpHdr = to.TcpHeader.Marshal()
+	tcpHdr := to.TcpHeader.Marshal(from.IpHeader, data)
 
 	pkt := append(ipHdr, tcpHdr...)
 	pkt = append(pkt, data...)
