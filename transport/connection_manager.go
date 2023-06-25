@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kawa1214/tcp-ip-go/application"
 	"github.com/kawa1214/tcp-ip-go/network"
 )
 
@@ -22,27 +21,33 @@ const (
 )
 
 type Connection struct {
-	SrcPort uint16
-	DstPort uint16
-	State   State
-	// Pkt      *server.TcpPacket
+	SrcPort  uint16
+	DstPort  uint16
+	State    State
+	Pkt      TcpPacket
 	N        uintptr
 	isAccept bool
 }
 
 type ConnectionManager struct {
-	Connections []Connection
-	lock        sync.Mutex
+	Connections     []Connection
+	ConnectionQueue chan Connection
+	lock            sync.Mutex
 }
 
 func NewConnectionManager() *ConnectionManager {
+	conns := make(chan Connection, 10)
 	return &ConnectionManager{
-		Connections: make([]Connection, 0),
+		Connections:     make([]Connection, 0),
+		ConnectionQueue: conns,
 	}
 }
 
 func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 	conn, ok := m.find(pkt)
+	if (ok) {
+		conn.Pkt = pkt
+	}
 
 	if pkt.TcpHeader.Flags.SYN {
 		log.Printf("Received SYN Packet")
@@ -65,7 +70,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 			IpHeader:  newIPHeader,
 			TcpHeader: newTcpHeader,
 		}
-		queue.send(pkt, sendPkt, nil)
+		queue.Write(pkt, sendPkt, nil)
 
 		m.update(pkt, StateSynReceived, false)
 	}
@@ -93,28 +98,10 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 			IpHeader:  newIPHeader,
 			TcpHeader: newTcpHeader,
 		}
-		queue.send(pkt, sendPkt, nil)
+		queue.Write(pkt, sendPkt, nil)
 		m.update(pkt, StateEstablished, true)
 
-		// TODO: Acceptでhttpパケットを送る
-		resp := application.NewTextOkResponse("Hello, World!\r\n")
-		payload := resp.String()
-		respNewIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH+len(payload))
-		respNewTcpHeader := New(
-			pkt.TcpHeader.DstPort,
-			pkt.TcpHeader.SrcPort,
-			pkt.TcpHeader.AckNum,
-			pkt.TcpHeader.SeqNum+uint32(tcpDataLen),
-			HeaderFlags{
-				PSH: true,
-				ACK: true,
-			},
-		)
-		sendPkt = TcpPacket{
-			IpHeader:  respNewIPHeader,
-			TcpHeader: respNewTcpHeader,
-		}
-		queue.send(pkt, sendPkt, []byte(payload))
+		m.ConnectionQueue <- conn
 	}
 
 	if ok && pkt.TcpHeader.Flags.FIN && conn.State == StateEstablished {
@@ -134,7 +121,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 			IpHeader:  newIPHeader,
 			TcpHeader: newTcpHeader,
 		}
-		queue.send(pkt, sendPkt, nil)
+		queue.Write(pkt, sendPkt, nil)
 		m.update(pkt, StateCloseWait, false)
 
 		newIPHeader = network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
@@ -152,7 +139,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 			IpHeader:  newIPHeader,
 			TcpHeader: newTcpHeader,
 		}
-		queue.send(pkt, sendPkt, nil)
+		queue.Write(pkt, sendPkt, nil)
 		m.update(pkt, StateLastAck, false)
 	}
 
@@ -206,6 +193,7 @@ func (m *ConnectionManager) update(pkt TcpPacket, state State, isAccept bool) {
 
 	for i, conn := range m.Connections {
 		if conn.SrcPort == pkt.TcpHeader.SrcPort && conn.DstPort == pkt.TcpHeader.DstPort {
+			m.Connections[i].Pkt = pkt
 			m.Connections[i].State = state
 			m.Connections[i].isAccept = isAccept
 			return

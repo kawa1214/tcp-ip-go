@@ -62,8 +62,8 @@ func (tcp *TcpPacketQueue) ManageQueues(ip *network.IpPacketQueue) {
 	}()
 }
 
-func (tcp *TcpPacketQueue) send(from, to TcpPacket, data []byte) {
-	log.Printf("send: %d", to.Packet.N)
+func (tcp *TcpPacketQueue) Write(from, to TcpPacket, data []byte) {
+	log.Printf("Write: %d", to.Packet.N)
 
 	ipHdr := to.IpHeader.Marshal()
 	to.IpHeader.SetChecksum(ipHdr)
@@ -80,4 +80,8 @@ func (tcp *TcpPacketQueue) send(from, to TcpPacket, data []byte) {
 		Buf: pkt,
 		N:   uintptr(len(pkt)),
 	}
+}
+
+func (tcp *TcpPacketQueue) ConnectionQueue() chan Connection {
+	return tcp.manager.ConnectionQueue
 }
