@@ -65,7 +65,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 			IpHeader:  newIPHeader,
 			TcpHeader: newTcpHeader,
 		}
-		queue.send(pkt, sendPkt,nil)
+		queue.send(pkt, sendPkt, nil)
 
 		m.update(pkt, StateSynReceived, false)
 	}
@@ -114,7 +114,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 			IpHeader:  respNewIPHeader,
 			TcpHeader: respNewTcpHeader,
 		}
-		queue.send(pkt, sendPkt,  []byte(payload))
+		queue.send(pkt, sendPkt, []byte(payload))
 	}
 
 	if ok && pkt.TcpHeader.Flags.FIN && conn.State == StateEstablished {
