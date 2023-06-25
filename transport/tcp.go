@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/kawa1214/tcp-ip-go/link"
+	"github.com/kawa1214/tcp-ip-go/datalink"
 	"github.com/kawa1214/tcp-ip-go/network"
 )
 
@@ -16,12 +16,12 @@ const (
 type TcpPacket struct {
 	IpHeader  *network.Header
 	TcpHeader *Header
-	Packet    link.Packet
+	Packet    datalink.Packet
 }
 
 type TcpPacketQueue struct {
 	manager       *ConnectionManager
-	outgoingQueue chan link.Packet
+	outgoingQueue chan datalink.Packet
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -30,7 +30,7 @@ func NewTcpPacketQueue() *TcpPacketQueue {
 	ConnectionManager := NewConnectionManager()
 	return &TcpPacketQueue{
 		manager:       ConnectionManager,
-		outgoingQueue: make(chan link.Packet, QUEUE_SIZE),
+		outgoingQueue: make(chan datalink.Packet, QUEUE_SIZE),
 	}
 }
 
@@ -92,7 +92,7 @@ func (tcp *TcpPacketQueue) Write(from, to TcpPacket, data []byte) {
 	pkt := append(ipHdr, tcpHdr...)
 	pkt = append(pkt, data...)
 
-	tcp.outgoingQueue <- link.Packet{
+	tcp.outgoingQueue <- datalink.Packet{
 		Buf: pkt,
 		N:   uintptr(len(pkt)),
 	}

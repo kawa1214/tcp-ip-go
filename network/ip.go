@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/kawa1214/tcp-ip-go/link"
+	"github.com/kawa1214/tcp-ip-go/datalink"
 )
 
 const (
@@ -14,12 +14,12 @@ const (
 
 type IpPacket struct {
 	IpHeader *Header
-	Packet   link.Packet
+	Packet   datalink.Packet
 }
 
 type IpPacketQueue struct {
 	incomingQueue chan IpPacket
-	outgoingQueue chan link.Packet
+	outgoingQueue chan datalink.Packet
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -27,11 +27,11 @@ type IpPacketQueue struct {
 func NewIpPacketQueue() *IpPacketQueue {
 	return &IpPacketQueue{
 		incomingQueue: make(chan IpPacket, QUEUE_SIZE),
-		outgoingQueue: make(chan link.Packet, QUEUE_SIZE),
+		outgoingQueue: make(chan datalink.Packet, QUEUE_SIZE),
 	}
 }
 
-func (ip *IpPacketQueue) ManageQueues(device *link.NetDevice) {
+func (ip *IpPacketQueue) ManageQueues(device *datalink.NetDevice) {
 	ip.ctx, ip.cancel = context.WithCancel(context.Background())
 
 	go func() {
@@ -88,7 +88,7 @@ func (q *IpPacketQueue) Read() (IpPacket, error) {
 	return pkt, nil
 }
 
-func (q *IpPacketQueue) Write(pkt link.Packet) error {
+func (q *IpPacketQueue) Write(pkt datalink.Packet) error {
 	select {
 	case q.outgoingQueue <- pkt:
 		return nil

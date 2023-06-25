@@ -3,13 +3,13 @@ package application
 import (
 	"fmt"
 
-	"github.com/kawa1214/tcp-ip-go/link"
+	"github.com/kawa1214/tcp-ip-go/datalink"
 	"github.com/kawa1214/tcp-ip-go/network"
 	"github.com/kawa1214/tcp-ip-go/transport"
 )
 
 type Server struct {
-	link           *link.NetDevice
+	device         *datalink.NetDevice
 	ipPacketQueue  *network.IpPacketQueue
 	tcpPacketQueue *transport.TcpPacketQueue
 }
@@ -19,9 +19,9 @@ func NewServer() *Server {
 }
 
 func (s *Server) ListenAndServe() error {
-	link, err := link.NewTun()
-	link.Bind()
-	s.link = link
+	device, err := datalink.NewTun()
+	device.Bind()
+	s.device = device
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (s *Server) ListenAndServe() error {
 
 func (s *Server) serve() {
 	ipPacketQueue := network.NewIpPacketQueue()
-	ipPacketQueue.ManageQueues(s.link)
+	ipPacketQueue.ManageQueues(s.device)
 	s.ipPacketQueue = ipPacketQueue
 
 	tcpPacketQueue := transport.NewTcpPacketQueue()
@@ -40,7 +40,7 @@ func (s *Server) serve() {
 }
 
 func (s *Server) Close() {
-	s.link.Close()
+	s.device.Close()
 	s.ipPacketQueue.Close()
 	s.tcpPacketQueue.Close()
 }
