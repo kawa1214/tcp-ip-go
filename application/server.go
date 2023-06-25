@@ -7,7 +7,7 @@ import (
 )
 
 type Server struct {
-	link           link.NetDevice
+	link           *link.NetDevice
 	ipPacketQueue  *network.IpPacketQueue
 	tcpPacketQueue *transport.TcpPacketQueue
 }

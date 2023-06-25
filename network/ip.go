@@ -20,7 +20,7 @@ func NewIpPacketQueue() *IpPacketQueue {
 	return &IpPacketQueue{}
 }
 
-func (ip *IpPacketQueue) ManageQueues(device link.NetDevice) {
+func (ip *IpPacketQueue) ManageQueues(device *link.NetDevice) {
 	packets := make(chan IpPacket, 10)
 	ip.incomingQueue = packets
 
@@ -28,20 +28,20 @@ func (ip *IpPacketQueue) ManageQueues(device link.NetDevice) {
 	ip.outgoingQueue = outPackets
 	go func() {
 		for {
-			select {
-			case pkt := <-device.IncomingQueue():
-				log.Printf("network pkt: %d", pkt.N)
-				ipHeader, err := Parse(pkt.Buf[:pkt.N])
-				if err != nil {
-					log.Printf("parse error: %s", err)
-					continue
-				}
-				ipPacket := IpPacket{
-					IpHeader: ipHeader,
-					Packet:   pkt,
-				}
-				packets <- ipPacket
+			pkt, err := device.Read()
+			if err != nil {
+				log.Printf("read error: %s", err.Error())
 			}
+			ipHeader, err := Parse(pkt.Buf[:pkt.N])
+			if err != nil {
+				log.Printf("parse error: %s", err)
+				continue
+			}
+			ipPacket := IpPacket{
+				IpHeader: ipHeader,
+				Packet:   pkt,
+			}
+			packets <- ipPacket
 		}
 	}()
 
@@ -49,8 +49,10 @@ func (ip *IpPacketQueue) ManageQueues(device link.NetDevice) {
 		for {
 			select {
 			case pkt := <-ip.outgoingQueue:
-				log.Printf("network write: %d", pkt.N)
-				device.OutgoingQueue() <- pkt
+				err := device.Write(pkt)
+				if err != nil {
+					log.Printf("write error: %s", err.Error())
+				}
 			}
 		}
 	}()

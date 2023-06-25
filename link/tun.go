@@ -1,6 +1,7 @@
 package link
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -13,15 +14,28 @@ type ifreq struct {
 	ifrFlags int16
 }
 
-type Tun struct {
-	file          *os.File
-	ifreq         *ifreq
-	incomingQueue chan Packet
-	outgoingQueue chan Packet
+const (
+	TUNSETIFF   = 0x400454ca
+	IFF_TUN     = 0x0001
+	IFF_NO_PI   = 0x1000
+	PACKET_SIZE = 2048
+	QUEUE_SIZE  = 10
+)
+
+type Packet struct {
+	Buf []byte
+	N   uintptr
 }
 
-// NewTun creates and initializes a new TUN device.
-func NewTun() (*Tun, error) {
+type NetDevice struct {
+	file          *os.File
+	incomingQueue chan Packet
+	outgoingQueue chan Packet
+	ctx           context.Context
+	cancel        context.CancelFunc
+}
+
+func NewTun() (*NetDevice, error) {
 	file, err := os.OpenFile("/dev/net/tun", os.O_RDWR, 0)
 	if err != nil {
 		return nil, fmt.Errorf("open error: %s", err.Error())
@@ -36,19 +50,23 @@ func NewTun() (*Tun, error) {
 		return nil, fmt.Errorf("ioctl error: %s", sysErr.Error())
 	}
 
-	return &Tun{
-		file:  file,
-		ifreq: &ifr,
+	return &NetDevice{
+		file:          file,
+		incomingQueue: make(chan Packet, QUEUE_SIZE),
+		outgoingQueue: make(chan Packet, QUEUE_SIZE),
 	}, nil
 }
 
-// Close closes the TUN device.
-func (t *Tun) Close() error {
-	return t.file.Close()
+func (t *NetDevice) Close() error {
+	err := t.file.Close()
+	if err != nil {
+		return fmt.Errorf("close error: %s", err.Error())
+	}
+
+	return nil
 }
 
-// Read packets with TUN Device.
-func (t *Tun) Read(buf []byte) (uintptr, error) {
+func (t *NetDevice) read(buf []byte) (uintptr, error) {
 	n, _, sysErr := syscall.Syscall(syscall.SYS_READ, t.file.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 	if sysErr != 0 {
 		return 0, fmt.Errorf("read error: %s", sysErr.Error())
@@ -57,8 +75,7 @@ func (t *Tun) Read(buf []byte) (uintptr, error) {
 	return n, nil
 }
 
-// Write packets with TUN Device.
-func (t *Tun) Write(buf []byte) (uintptr, error) {
+func (t *NetDevice) write(buf []byte) (uintptr, error) {
 	n, _, sysErr := syscall.Syscall(syscall.SYS_WRITE, t.file.Fd(), uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
 	if sysErr != 0 {
 		return 0, fmt.Errorf("write error: %s", sysErr.Error())
@@ -67,35 +84,36 @@ func (t *Tun) Write(buf []byte) (uintptr, error) {
 	return n, nil
 }
 
-// Bind TUN Device.
-func (tun *Tun) Bind() {
-	packets := make(chan Packet, 10)
-	tun.incomingQueue = packets
+func (tun *NetDevice) Bind() {
+	tun.ctx, tun.cancel = context.WithCancel(context.Background())
 
-	outPackets := make(chan Packet, 10)
-	tun.outgoingQueue = outPackets
 	go func() {
 		for {
-			buf := make([]byte, 2048)
-			n, err := tun.Read(buf)
-			if err != nil {
-				log.Printf("read error: %s", err.Error())
+			select {
+			case <-tun.ctx.Done():
+				return
+			default:
+				buf := make([]byte, PACKET_SIZE)
+				n, err := tun.read(buf)
+				if err != nil {
+					log.Printf("read error: %s", err.Error())
+				}
+				packet := Packet{
+					Buf: buf[:n],
+					N:   n,
+				}
+				tun.incomingQueue <- packet
 			}
-			log.Printf("link read: %d", n)
-			packet := Packet{
-				Buf: buf,
-				N:   n,
-			}
-			packets <- packet
 		}
 	}()
 
 	go func() {
 		for {
 			select {
+			case <-tun.ctx.Done():
+				return
 			case pkt := <-tun.outgoingQueue:
-				log.Printf("link write: %d", pkt.N)
-				_, err := tun.Write(pkt.Buf[:pkt.N])
+				_, err := tun.write(pkt.Buf[:pkt.N])
 				if err != nil {
 					log.Printf("write error: %s", err.Error())
 				}
@@ -104,10 +122,19 @@ func (tun *Tun) Bind() {
 	}()
 }
 
-func (t *Tun) IncomingQueue() chan Packet {
-	return t.incomingQueue
+func (t *NetDevice) Read() (Packet, error) {
+	pkt, ok := <-t.incomingQueue
+	if !ok {
+		return Packet{}, fmt.Errorf("incoming queue is closed")
+	}
+	return pkt, nil
 }
 
-func (t *Tun) OutgoingQueue() chan Packet {
-	return t.outgoingQueue
+func (t *NetDevice) Write(pkt Packet) error {
+	select {
+	case t.outgoingQueue <- pkt:
+		return nil
+	case <-t.ctx.Done():
+		return fmt.Errorf("device closed")
+	}
 }
