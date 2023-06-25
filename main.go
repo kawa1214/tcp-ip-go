@@ -13,7 +13,11 @@ func main() {
 	s.ListenAndServe()
 
 	for {
-		conn := s.Accept()
+		conn, err := s.Accept()
+		if err != nil {
+			log.Printf("accept error: %s", err)
+			continue
+		}
 
 		reqRaw := string(conn.Pkt.Packet.Buf[conn.Pkt.IpHeader.IHL*4+conn.Pkt.TcpHeader.DataOff*4:])
 		req, err := application.ParseHTTPRequest(reqRaw)

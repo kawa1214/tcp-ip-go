@@ -1,10 +1,16 @@
 package transport
 
 import (
+	"context"
+	"fmt"
 	"log"
 
 	"github.com/kawa1214/tcp-ip-go/link"
 	"github.com/kawa1214/tcp-ip-go/network"
+)
+
+const (
+	QUEUE_SIZE = 10
 )
 
 type TcpPacket struct {
@@ -14,60 +20,71 @@ type TcpPacket struct {
 }
 
 type TcpPacketQueue struct {
-	manager *ConnectionManager
-	// incomingQueue chan TcpPacket
+	manager       *ConnectionManager
 	outgoingQueue chan link.Packet
+	ctx           context.Context
+	cancel        context.CancelFunc
 }
 
 func NewTcpPacketQueue() *TcpPacketQueue {
 	ConnectionManager := NewConnectionManager()
 	return &TcpPacketQueue{
-		manager: ConnectionManager,
+		manager:       ConnectionManager,
+		outgoingQueue: make(chan link.Packet, QUEUE_SIZE),
 	}
 }
 
 func (tcp *TcpPacketQueue) ManageQueues(ip *network.IpPacketQueue) {
-	packets := make(chan link.Packet, 10)
-	tcp.outgoingQueue = packets
-
+	tcp.ctx, tcp.cancel = context.WithCancel(context.Background())
 	go func() {
 		for {
-			ipPkt, err := ip.Read()
-			if err != nil {
-				log.Printf("read error: %s", err.Error())
-			}
-			log.Printf("transport pkt: %d", ipPkt.Packet.N)
-			tcpHeader, err := Parse(ipPkt.Packet.Buf[ipPkt.IpHeader.IHL*4 : ipPkt.Packet.N])
-			if err != nil {
-				log.Printf("parse error: %s", err)
-				continue
-			}
-			tcpPacket := TcpPacket{
-				IpHeader:  ipPkt.IpHeader,
-				TcpHeader: tcpHeader,
-				Packet:    ipPkt.Packet,
-			}
+			select {
+			case <-tcp.ctx.Done():
+				return
+			default:
+				ipPkt, err := ip.Read()
+				if err != nil {
+					log.Printf("read error: %s", err.Error())
+				}
+				tcpHeader, err := Parse(ipPkt.Packet.Buf[ipPkt.IpHeader.IHL*4 : ipPkt.Packet.N])
+				if err != nil {
+					log.Printf("parse error: %s", err)
+					continue
+				}
+				tcpPacket := TcpPacket{
+					IpHeader:  ipPkt.IpHeader,
+					TcpHeader: tcpHeader,
+					Packet:    ipPkt.Packet,
+				}
 
-			tcp.manager.recv(tcp, tcpPacket)
+				tcp.manager.recv(tcp, tcpPacket)
+			}
 		}
 	}()
 
 	go func() {
 		for {
 			select {
-			case pkt := <-tcp.outgoingQueue:
-				log.Printf("transport write: %d", pkt.N)
-				err := ip.Write(pkt)
-				if err != nil {
-					log.Printf("write error: %s", err.Error())
+			case <-tcp.ctx.Done():
+				return
+			default:
+				select {
+				case pkt := <-tcp.outgoingQueue:
+					err := ip.Write(pkt)
+					if err != nil {
+						log.Printf("write error: %s", err.Error())
+					}
 				}
 			}
 		}
 	}()
 }
 
+func (tcp *TcpPacketQueue) Close() {
+	tcp.cancel()
+}
+
 func (tcp *TcpPacketQueue) Write(from, to TcpPacket, data []byte) {
-	log.Printf("Write: %d", to.Packet.N)
 
 	ipHdr := to.IpHeader.Marshal()
 	tcpHdr := to.TcpHeader.Marshal(from.IpHeader, data)
@@ -81,6 +98,11 @@ func (tcp *TcpPacketQueue) Write(from, to TcpPacket, data []byte) {
 	}
 }
 
-func (tcp *TcpPacketQueue) ConnectionQueue() chan Connection {
-	return tcp.manager.ConnectionQueue
+func (tcp *TcpPacketQueue) ReadConnection() (Connection, error) {
+	pkt, ok := <-tcp.manager.ConnectionQueue
+	if !ok {
+		return Connection{}, fmt.Errorf("connection queue is closed")
+	}
+
+	return pkt, nil
 }

@@ -1,6 +1,8 @@
 package application
 
 import (
+	"fmt"
+
 	"github.com/kawa1214/tcp-ip-go/link"
 	"github.com/kawa1214/tcp-ip-go/network"
 	"github.com/kawa1214/tcp-ip-go/transport"
@@ -37,17 +39,19 @@ func (s *Server) serve() {
 	s.tcpPacketQueue = tcpPacketQueue
 }
 
-func (s *Server) Close() error {
+func (s *Server) Close() {
 	s.link.Close()
 	s.ipPacketQueue.Close()
-	return nil
+	s.tcpPacketQueue.Close()
 }
 
-func (s *Server) Accept() transport.Connection {
-	select {
-	case conn := <-s.tcpPacketQueue.ConnectionQueue():
-		return conn
+func (s *Server) Accept() (transport.Connection, error) {
+	conn, err := s.tcpPacketQueue.ReadConnection()
+	if err != nil {
+		return transport.Connection{}, fmt.Errorf("accept error: %s", err)
 	}
+
+	return conn, nil
 }
 
 func (s *Server) Write(conn transport.Connection, resp *HTTPResponse) {
