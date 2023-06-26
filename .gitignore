@@ -1,3 +1,4 @@
 bin/main
 wireshark/
 capture.pcap
+.DS_Store
