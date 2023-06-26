@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/kawa1214/tcp-ip-go/network"
+	"github.com/kawa1214/tcp-ip-go/internet"
 )
 
 const (
@@ -78,7 +78,7 @@ func New(srcPort, dstPort uint16, seqNum, ackNum uint32, flags HeaderFlags) *Hea
 }
 
 // Return a byte slice of the packet.
-func (h *Header) Marshal(ipHdr *network.Header, data []byte) []byte {
+func (h *Header) Marshal(ipHdr *internet.Header, data []byte) []byte {
 	f := h.Flags.marshal()
 
 	pkt := make([]byte, 20)
@@ -99,7 +99,7 @@ func (h *Header) Marshal(ipHdr *network.Header, data []byte) []byte {
 }
 
 // Calculates the checksum of the packet and sets Header.
-func (h *Header) setChecksum(ipHeader *network.Header, pkt []byte) {
+func (h *Header) setChecksum(ipHeader *internet.Header, pkt []byte) {
 	pseudoHeader := make([]byte, 12)
 	copy(pseudoHeader[0:4], ipHeader.SrcIP[:])
 	copy(pseudoHeader[4:8], ipHeader.DstIP[:])

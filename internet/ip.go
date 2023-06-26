@@ -1,11 +1,11 @@
-package network
+package internet
 
 import (
 	"context"
 	"fmt"
 	"log"
 
-	"github.com/kawa1214/tcp-ip-go/datalink"
+	"github.com/kawa1214/tcp-ip-go/network"
 )
 
 const (
@@ -14,12 +14,12 @@ const (
 
 type IpPacket struct {
 	IpHeader *Header
-	Packet   datalink.Packet
+	Packet   network.Packet
 }
 
 type IpPacketQueue struct {
 	incomingQueue chan IpPacket
-	outgoingQueue chan datalink.Packet
+	outgoingQueue chan network.Packet
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
@@ -27,11 +27,11 @@ type IpPacketQueue struct {
 func NewIpPacketQueue() *IpPacketQueue {
 	return &IpPacketQueue{
 		incomingQueue: make(chan IpPacket, QUEUE_SIZE),
-		outgoingQueue: make(chan datalink.Packet, QUEUE_SIZE),
+		outgoingQueue: make(chan network.Packet, QUEUE_SIZE),
 	}
 }
 
-func (ip *IpPacketQueue) ManageQueues(device *datalink.NetDevice) {
+func (ip *IpPacketQueue) ManageQueues(network *network.NetDevice) {
 	ip.ctx, ip.cancel = context.WithCancel(context.Background())
 
 	go func() {
@@ -40,7 +40,7 @@ func (ip *IpPacketQueue) ManageQueues(device *datalink.NetDevice) {
 			case <-ip.ctx.Done():
 				return
 			default:
-				pkt, err := device.Read()
+				pkt, err := network.Read()
 				if err != nil {
 					log.Printf("read error: %s", err.Error())
 				}
@@ -66,7 +66,7 @@ func (ip *IpPacketQueue) ManageQueues(device *datalink.NetDevice) {
 			default:
 				select {
 				case pkt := <-ip.outgoingQueue:
-					err := device.Write(pkt)
+					err := network.Write(pkt)
 					if err != nil {
 						log.Printf("write error: %s", err.Error())
 					}
@@ -88,11 +88,11 @@ func (q *IpPacketQueue) Read() (IpPacket, error) {
 	return pkt, nil
 }
 
-func (q *IpPacketQueue) Write(pkt datalink.Packet) error {
+func (q *IpPacketQueue) Write(pkt network.Packet) error {
 	select {
 	case q.outgoingQueue <- pkt:
 		return nil
 	case <-q.ctx.Done():
-		return fmt.Errorf("device closed")
+		return fmt.Errorf("network closed")
 	}
 }

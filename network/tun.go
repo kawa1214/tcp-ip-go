@@ -1,4 +1,4 @@
-package datalink
+package network
 
 import (
 	"context"

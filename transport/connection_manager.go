@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kawa1214/tcp-ip-go/network"
+	"github.com/kawa1214/tcp-ip-go/internet"
 )
 
 type State int
@@ -52,7 +52,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 		log.Printf("Received SYN Packet")
 		m.addConnection(pkt)
 
-		newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
+		newIPHeader := internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
 		seed := time.Now().UnixNano()
 		r := rand.New(rand.NewSource(seed))
 		newTcpHeader := New(
@@ -82,7 +82,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 	if ok && pkt.TcpHeader.Flags.PSH && conn.State == StateEstablished {
 		log.Printf("Received PSH Packet")
 
-		newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
+		newIPHeader := internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
 		tcpDataLen := int(pkt.Packet.N) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
 		newTcpHeader := New(
 			pkt.TcpHeader.DstPort,
@@ -106,7 +106,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 	if ok && pkt.TcpHeader.Flags.FIN && conn.State == StateEstablished {
 		log.Printf("Received FIN Packet")
 
-		newIPHeader := network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
+		newIPHeader := internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
 		newTcpHeader := New(
 			pkt.TcpHeader.DstPort,
 			pkt.TcpHeader.SrcPort,
@@ -123,7 +123,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 		queue.Write(pkt, sendPkt, nil)
 		m.update(pkt, StateCloseWait, false)
 
-		newIPHeader = network.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
+		newIPHeader = internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
 		newTcpHeader = New(
 			pkt.TcpHeader.DstPort,
 			pkt.TcpHeader.SrcPort,
