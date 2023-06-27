@@ -63,13 +63,10 @@ func (ip *IpPacketQueue) ManageQueues(network *network.NetDevice) {
 			select {
 			case <-ip.ctx.Done():
 				return
-			default:
-				select {
-				case pkt := <-ip.outgoingQueue:
-					err := network.Write(pkt)
-					if err != nil {
-						log.Printf("write error: %s", err.Error())
-					}
+			case pkt := <-ip.outgoingQueue:
+				err := network.Write(pkt)
+				if err != nil {
+					log.Printf("write error: %s", err.Error())
 				}
 			}
 		}
