@@ -48,7 +48,7 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 		conn.Pkt = pkt
 	}
 
-	if pkt.TcpHeader.Flags.SYN {
+	if pkt.TcpHeader.Flags.SYN && !ok {
 		log.Printf("Received SYN Packet")
 		m.addConnection(pkt)
 
