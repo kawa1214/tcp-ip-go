@@ -26,17 +26,6 @@ type Header struct {
 	UrgentPtr  uint16
 }
 
-type HeaderFlags struct {
-	CWR bool
-	ECE bool
-	URG bool
-	ACK bool
-	PSH bool
-	RST bool
-	SYN bool
-	FIN bool
-}
-
 // New creates a new TCP header from packet.
 func Parse(pkt []byte) (*Header, error) {
 	if len(pkt) < 20 {
@@ -122,6 +111,17 @@ func (h *Header) setChecksum(ipHeader *internet.Header, pkt []byte) {
 	}
 
 	h.Checksum = ^uint16(checksum)
+}
+
+type HeaderFlags struct {
+	CWR bool
+	ECE bool
+	URG bool
+	ACK bool
+	PSH bool
+	RST bool
+	SYN bool
+	FIN bool
 }
 
 // Return a string representation of the packet byte.
