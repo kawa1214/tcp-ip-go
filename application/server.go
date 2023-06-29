@@ -54,7 +54,7 @@ func (s *Server) Accept() (transport.Connection, error) {
 	return conn, nil
 }
 
-func (s *Server) Write(conn transport.Connection, resp *HTTPResponse) {
+func (s *Server) Write(conn transport.Connection, resp *HttpResponse) {
 	pkt := conn.Pkt
 	tcpDataLen := int(pkt.Packet.N) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
 

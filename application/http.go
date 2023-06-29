@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-type HTTPRequest struct {
+type HttpRequest struct {
 	Method  string
 	URI     string
 	Version string
@@ -15,11 +15,35 @@ type HTTPRequest struct {
 	Body    string
 }
 
-type HTTPResponse struct {
+type HttpResponse struct {
 	Version string
 	Status  string
 	Headers map[string]string
 	Body    string
+}
+
+type HttpStatus int
+
+const (
+	HttpStatusOK HttpStatus = iota
+	HttpStatusCreated
+	HttpStatusNotFound
+	HttpStatusInternalServerError
+)
+
+func (s HttpStatus) String() string {
+	switch s {
+	case HttpStatusOK:
+		return "200 OK"
+	case HttpStatusCreated:
+		return "201 Created"
+	case HttpStatusNotFound:
+		return "404 Not Found"
+	case HttpStatusInternalServerError:
+		return "500 Internal Server Error"
+	default:
+		return "500 Internal Server Error"
+	}
 }
 
 const (
@@ -27,7 +51,7 @@ const (
 )
 
 // Parse an HTTP request from a string.
-func ParseHTTPRequest(raw string) (*HTTPRequest, error) {
+func ParseHttpRequest(raw string) (*HttpRequest, error) {
 	scanner := bufio.NewScanner(strings.NewReader(raw))
 	var requestLine string
 
@@ -42,7 +66,7 @@ func ParseHTTPRequest(raw string) (*HTTPRequest, error) {
 		return nil, fmt.Errorf("invalid request line: %s", requestLine)
 	}
 
-	request := &HTTPRequest{
+	request := &HttpRequest{
 		Method:  parts[0],
 		URI:     parts[1],
 		Version: parts[2],
@@ -73,13 +97,14 @@ func ParseHTTPRequest(raw string) (*HTTPRequest, error) {
 }
 
 // Create a new HTTP response.
-func NewTextOkResponse(body string) *HTTPResponse {
-	res := HTTPResponse{
+func NewHttpResponse(status HttpStatus, body string) *HttpResponse {
+	contentLen := fmt.Sprintf("%d", utf8.RuneCountInString(body))
+	res := HttpResponse{
 		Version: HTTP_VERSION,
-		Status:  "200 OK",
+		Status:  status.String(),
 		Headers: map[string]string{
 			"Content-Type":   "text/plain",
-			"Content-Length": fmt.Sprintf("%d", getContentLength(body)),
+			"Content-Length": contentLen,
 		},
 		Body: body,
 	}
@@ -87,12 +112,8 @@ func NewTextOkResponse(body string) *HTTPResponse {
 	return &res
 }
 
-func getContentLength(body string) int {
-	return utf8.RuneCountInString(body)
-}
-
 // Convert an HTTP response to a string.
-func (res *HTTPResponse) String() string {
+func (res *HttpResponse) String() string {
 	var response string
 
 	response += fmt.Sprintf("%s %s\r\n", res.Version, res.Status)
