@@ -46,9 +46,9 @@ func (tcp *TcpPacketQueue) ManageQueues(ip *internet.IpPacketQueue) {
 				if err != nil {
 					log.Printf("read error: %s", err.Error())
 				}
-				tcpHeader, err := Parse(ipPkt.Packet.Buf[ipPkt.IpHeader.IHL*4 : ipPkt.Packet.N])
+				tcpHeader, err := unmarshal(ipPkt.Packet.Buf[ipPkt.IpHeader.IHL*4 : ipPkt.Packet.N])
 				if err != nil {
-					log.Printf("parse error: %s", err)
+					log.Printf("unmarshal error: %s", err)
 					continue
 				}
 				tcpPacket := TcpPacket{

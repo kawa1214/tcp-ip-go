@@ -31,7 +31,7 @@ const (
 )
 
 // New creates a new IP header from packet.
-func Parse(pkt []byte) (*Header, error) {
+func unmarshal(pkt []byte) (*Header, error) {
 	if len(pkt) < IP_HEADER_MIN_LEN {
 		return nil, fmt.Errorf("invalid IP header length")
 	}

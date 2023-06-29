@@ -27,12 +27,12 @@ type Header struct {
 }
 
 // New creates a new TCP header from packet.
-func Parse(pkt []byte) (*Header, error) {
+func unmarshal(pkt []byte) (*Header, error) {
 	if len(pkt) < 20 {
 		return nil, fmt.Errorf("invalid TCP header length")
 	}
 
-	flags := parseFlag(pkt[13])
+	flags := unmarshalFlag(pkt[13])
 
 	header := &Header{
 		SrcPort:    binary.BigEndian.Uint16(pkt[0:2]),
@@ -125,7 +125,7 @@ type HeaderFlags struct {
 }
 
 // Return a string representation of the packet byte.
-func parseFlag(f uint8) HeaderFlags {
+func unmarshalFlag(f uint8) HeaderFlags {
 	return HeaderFlags{
 		CWR: f&0x80 == 0x80,
 		ECE: f&0x40 == 0x40,
