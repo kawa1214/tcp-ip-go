@@ -72,7 +72,6 @@ func (t *NetDevice) read(buf []byte) (uintptr, error) {
 	if sysErr != 0 {
 		return 0, fmt.Errorf("read error: %s", sysErr.Error())
 	}
-
 	return n, nil
 }
 
@@ -81,7 +80,6 @@ func (t *NetDevice) write(buf []byte) (uintptr, error) {
 	if sysErr != 0 {
 		return 0, fmt.Errorf("write error: %s", sysErr.Error())
 	}
-
 	return n, nil
 }
 
