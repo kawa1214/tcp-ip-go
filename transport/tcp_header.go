@@ -52,12 +52,14 @@ func unmarshal(pkt []byte) (*Header, error) {
 
 // Create a new TCP header.
 func New(srcPort, dstPort uint16, seqNum, ackNum uint32, flags HeaderFlags) *Header {
+	dataOff := uint16(LENGTH / 4)
+	dataOff <<= 4
 	return &Header{
 		SrcPort:    srcPort,
 		DstPort:    dstPort,
 		SeqNum:     seqNum,
 		AckNum:     ackNum,
-		DataOff:    0x50,
+		DataOff:    uint8(dataOff),
 		Reserved:   0x12,
 		Flags:      flags,
 		WindowSize: uint16(WINDOW_SIZE),
