@@ -55,25 +55,10 @@ func (s *Server) Accept() (transport.Connection, error) {
 }
 
 func (s *Server) Write(conn transport.Connection, resp *HttpResponse) {
-	pkt := conn.Pkt
-	tcpDataLen := int(pkt.Packet.N) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
-
-	payload := resp.String()
-	respNewIPHeader := internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, transport.LENGTH+len(payload))
-	respNewTcpHeader := transport.New(
-		pkt.TcpHeader.DstPort,
-		pkt.TcpHeader.SrcPort,
-		pkt.TcpHeader.AckNum,
-		pkt.TcpHeader.SeqNum+uint32(tcpDataLen),
-		transport.HeaderFlags{
-			PSH: true,
-			ACK: true,
-		},
+	s.tcpPacketQueue.Write(conn, transport.HeaderFlags{
+		PSH: true,
+		ACK: true,
+	},
+		[]byte(resp.String()),
 	)
-	sendPkt := transport.TcpPacket{
-		IpHeader:  respNewIPHeader,
-		TcpHeader: respNewTcpHeader,
-	}
-
-	s.tcpPacketQueue.Write(pkt, sendPkt, []byte(payload))
 }

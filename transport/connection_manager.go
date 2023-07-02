@@ -5,8 +5,6 @@ import (
 	"math/rand"
 	"sync"
 	"time"
-
-	"github.com/kawa1214/tcp-ip-go/internet"
 )
 
 type State int
@@ -21,11 +19,15 @@ const (
 )
 
 type Connection struct {
-	SrcPort  uint16
-	DstPort  uint16
-	State    State
-	Pkt      TcpPacket
-	N        uintptr
+	SrcPort uint16
+	DstPort uint16
+	State   State
+	Pkt     TcpPacket
+	N       uintptr
+
+	initialSeqNum   uint32
+	incrementSeqNum uint32
+
 	isAccept bool
 }
 
@@ -46,30 +48,17 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 	conn, ok := m.find(pkt)
 	if ok {
 		conn.Pkt = pkt
+	} else {
+		conn = m.addConnection(pkt)
 	}
 
 	if pkt.TcpHeader.Flags.SYN && !ok {
 		log.Printf("Received SYN Packet")
-		m.addConnection(pkt)
 
-		newIPHeader := internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
-		seed := time.Now().UnixNano()
-		r := rand.New(rand.NewSource(seed))
-		newTcpHeader := New(
-			pkt.TcpHeader.DstPort,
-			pkt.TcpHeader.SrcPort,
-			uint32(r.Int31()),
-			pkt.TcpHeader.SeqNum+1,
-			HeaderFlags{
-				SYN: true,
-				ACK: true,
-			},
-		)
-		sendPkt := TcpPacket{
-			IpHeader:  newIPHeader,
-			TcpHeader: newTcpHeader,
-		}
-		queue.Write(pkt, sendPkt, nil)
+		queue.Write(conn, HeaderFlags{
+			SYN: true,
+			ACK: true,
+		}, nil)
 
 		m.update(pkt, StateSynReceived, false)
 	}
@@ -82,22 +71,9 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 	if ok && pkt.TcpHeader.Flags.PSH && conn.State == StateEstablished {
 		log.Printf("Received PSH Packet")
 
-		newIPHeader := internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
-		tcpDataLen := int(pkt.Packet.N) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
-		newTcpHeader := New(
-			pkt.TcpHeader.DstPort,
-			pkt.TcpHeader.SrcPort,
-			pkt.TcpHeader.AckNum,
-			pkt.TcpHeader.SeqNum+uint32(tcpDataLen),
-			HeaderFlags{
-				ACK: true,
-			},
-		)
-		sendPkt := TcpPacket{
-			IpHeader:  newIPHeader,
-			TcpHeader: newTcpHeader,
-		}
-		queue.Write(pkt, sendPkt, nil)
+		queue.Write(conn, HeaderFlags{
+			ACK: true,
+		}, nil)
 		m.update(pkt, StateEstablished, true)
 
 		m.AcceptConnectionQueue <- conn
@@ -106,39 +82,15 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 	if ok && pkt.TcpHeader.Flags.FIN && conn.State == StateEstablished {
 		log.Printf("Received FIN Packet")
 
-		newIPHeader := internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
-		newTcpHeader := New(
-			pkt.TcpHeader.DstPort,
-			pkt.TcpHeader.SrcPort,
-			pkt.TcpHeader.AckNum,
-			pkt.TcpHeader.SeqNum+1,
-			HeaderFlags{
-				ACK: true,
-			},
-		)
-		sendPkt := TcpPacket{
-			IpHeader:  newIPHeader,
-			TcpHeader: newTcpHeader,
-		}
-		queue.Write(pkt, sendPkt, nil)
+		queue.Write(conn, HeaderFlags{
+			ACK: true,
+		}, nil)
 		m.update(pkt, StateCloseWait, false)
 
-		newIPHeader = internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH)
-		newTcpHeader = New(
-			pkt.TcpHeader.DstPort,
-			pkt.TcpHeader.SrcPort,
-			pkt.TcpHeader.AckNum,
-			pkt.TcpHeader.SeqNum+1,
-			HeaderFlags{
-				FIN: true,
-				ACK: true,
-			},
-		)
-		sendPkt = TcpPacket{
-			IpHeader:  newIPHeader,
-			TcpHeader: newTcpHeader,
-		}
-		queue.Write(pkt, sendPkt, nil)
+		queue.Write(conn, HeaderFlags{
+			FIN: true,
+			ACK: true,
+		}, nil)
 		m.update(pkt, StateLastAck, false)
 	}
 
@@ -149,16 +101,24 @@ func (m *ConnectionManager) recv(queue *TcpPacketQueue, pkt TcpPacket) {
 	}
 }
 
-func (m *ConnectionManager) addConnection(pkt TcpPacket) {
+func (m *ConnectionManager) addConnection(pkt TcpPacket) Connection {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	seed := time.Now().UnixNano()
+	r := rand.New(rand.NewSource(seed))
 
-	m.Connections = append(m.Connections, Connection{
-		SrcPort: pkt.TcpHeader.SrcPort,
-		DstPort: pkt.TcpHeader.DstPort,
-		State:   StateSynReceived,
-		N:       pkt.Packet.N,
-	})
+	conn := Connection{
+		SrcPort:         pkt.TcpHeader.SrcPort,
+		DstPort:         pkt.TcpHeader.DstPort,
+		State:           StateSynReceived,
+		N:               pkt.Packet.N,
+		Pkt:             pkt,
+		initialSeqNum:   uint32(r.Int31()),
+		incrementSeqNum: 0,
+	}
+	m.Connections = append(m.Connections, conn)
+
+	return conn
 }
 
 func (m *ConnectionManager) remove(pkt TcpPacket) {
@@ -192,9 +152,20 @@ func (m *ConnectionManager) update(pkt TcpPacket, state State, isAccept bool) {
 
 	for i, conn := range m.Connections {
 		if conn.SrcPort == pkt.TcpHeader.SrcPort && conn.DstPort == pkt.TcpHeader.DstPort {
-			m.Connections[i].Pkt = pkt
 			m.Connections[i].State = state
 			m.Connections[i].isAccept = isAccept
+			return
+		}
+	}
+}
+
+func (m *ConnectionManager) updateIncrementSeqNum(pkt TcpPacket, val uint32) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	for i, conn := range m.Connections {
+		if conn.SrcPort == pkt.TcpHeader.SrcPort && conn.DstPort == pkt.TcpHeader.DstPort {
+			m.Connections[i].incrementSeqNum += val
 			return
 		}
 	}

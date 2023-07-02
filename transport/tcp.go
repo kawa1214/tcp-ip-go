@@ -81,17 +81,45 @@ func (tcp *TcpPacketQueue) Close() {
 	tcp.cancel()
 }
 
-func (tcp *TcpPacketQueue) Write(from, to TcpPacket, data []byte) {
+func (tcp *TcpPacketQueue) Write(conn Connection, flgs HeaderFlags, data []byte) {
+	pkt := conn.Pkt
+	tcpDataLen := int(pkt.Packet.N) - (int(pkt.IpHeader.IHL) * 4) - (int(pkt.TcpHeader.DataOff) * 4)
 
-	ipHdr := to.IpHeader.Marshal()
-	tcpHdr := to.TcpHeader.Marshal(from.IpHeader, data)
+	incrementAckNum := 0
+	if tcpDataLen == 0 {
+		incrementAckNum = 1
+	} else {
+		incrementAckNum = tcpDataLen
+	}
+	ackNum := pkt.TcpHeader.SeqNum + uint32(incrementAckNum)
 
-	pkt := append(ipHdr, tcpHdr...)
-	pkt = append(pkt, data...)
+	seqNum := conn.initialSeqNum + conn.incrementSeqNum
+
+	writeIpHdr := internet.NewIp(pkt.IpHeader.DstIP, pkt.IpHeader.SrcIP, LENGTH+len(data))
+	writeTcpHdr := New(
+		pkt.TcpHeader.DstPort,
+		pkt.TcpHeader.SrcPort,
+		seqNum,
+		ackNum,
+		flgs,
+	)
+
+	ipHdr := writeIpHdr.Marshal()
+	tcpHdr := writeTcpHdr.Marshal(conn.Pkt.IpHeader, data)
+
+	writePkt := append(ipHdr, tcpHdr...)
+	writePkt = append(writePkt, data...)
+
+	incrementSeqNum := 0
+	if flgs.SYN || flgs.FIN {
+		incrementSeqNum += 1
+	}
+	incrementSeqNum += len(data)
+	tcp.manager.updateIncrementSeqNum(pkt, uint32(incrementSeqNum))
 
 	tcp.outgoingQueue <- network.Packet{
-		Buf: pkt,
-		N:   uintptr(len(pkt)),
+		Buf: writePkt,
+		N:   uintptr(len(writePkt)),
 	}
 }
 
