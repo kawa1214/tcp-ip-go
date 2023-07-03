@@ -80,7 +80,7 @@ func main() {
 				s.Write(conn, resp)
 				continue
 			}
-			resp := application.NewHttpResponse(application.HttpStatusCreated, string(body)+string('\n'))
+			resp := application.NewHttpResponse(application.HttpStatusOK, string(body)+string('\n'))
 			s.Write(conn, resp)
 		}
 
@@ -100,7 +100,7 @@ func main() {
 				continue
 			}
 
-			resp := application.NewHttpResponse(application.HttpStatusOK, string(body)+string('\n'))
+			resp := application.NewHttpResponse(application.HttpStatusCreated, string(body)+string('\n'))
 			s.Write(conn, resp)
 		}
 	}
